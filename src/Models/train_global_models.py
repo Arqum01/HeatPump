@@ -7,7 +7,7 @@ from sklearn.ensemble import GradientBoostingRegressor
 # XGBoost
 from xgboost import XGBRegressor
 
-DATA_PATH = "data/processed/daikin_clean_01-01-2026_to_30-01-2026_hourly.csv"
+DATA_PATH = "data/processed/daikin_clean_01-03-2025_to_01-03-2026_hourly.csv"
 
 # -----------------------------
 # 1) Load and sort (time split)
