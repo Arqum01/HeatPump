@@ -13,8 +13,8 @@ FEEDS = [
     "heatpump_flowrate",
 ]
 
-START = "01-01-2026"  # dd-mm-yyyy
-END = "30-01-2026"    # dd-mm-yyyy
+START = "01-03-2025"  # dd-mm-yyyy
+END = "01-03-2026"    # dd-mm-yyyy
 
 url = "https://heatpumpmonitor.org/timeseries/data"
 params = {
@@ -57,7 +57,7 @@ df = pd.DataFrame({k: v[:len(time_index)] for k, v in data.items()}, index=time_
 df.index.name = "timestamp"
 
 # Save clean CSV
-out_path = f"data/processed/system_{SYSTEM_ID}_{START}_to_{END}_hourly.csv"
+out_path = f"data/Raw/system_{SYSTEM_ID}_{START}_to_{END}_hourly.csv"
 df.to_csv(out_path)
 
 print("Saved CLEAN table to:", out_path)
