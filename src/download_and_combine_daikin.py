@@ -22,8 +22,8 @@ FEEDS = [
     "heatpump_flowrate",
 ]
 
-START = "01-01-2026"         # dd-mm-yyyy
-END = "30-01-2026"           # dd-mm-yyyy
+START = "01-03-2025"         # dd-mm-yyyy
+END = "01-03-2026"           # dd-mm-yyyy
 INTERVAL_SECONDS = 3600      # hourly
 AVERAGE = 1
 TIMEFORMAT = "notime"

@@ -1,7 +1,7 @@
 import pandas as pd
 
-INPUT_PATH = "data/processed/daikin_features_01-01-2026_to_30-01-2026_hourly.csv"
-OUTPUT_PATH = "data/processed/daikin_clean_01-01-2026_to_30-01-2026_hourly.csv"
+INPUT_PATH = "data/processed/daikin_features_01-03-2025_to_01-03-2026_hourly.csv"
+OUTPUT_PATH = "data/processed/daikin_clean_01-03-2025_to_01-03-2026_hourly.csv"
 
 df = pd.read_csv(INPUT_PATH, parse_dates=["timestamp"])
 
