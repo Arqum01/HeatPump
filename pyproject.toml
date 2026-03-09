@@ -1,0 +1,14 @@
+[project]
+name = "heatpump"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.28.1",
+    "numpy>=2.4.2",
+    "pandas>=3.0.1",
+    "requests>=2.32.5",
+    "scikit-learn>=1.8.0",
+    "xgboost>=3.2.0",
+]
