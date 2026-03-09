@@ -1,0 +1,31 @@
+==================================================
+       DAIKIN HEAT PUMP — TRAINING REPORT
+       Generated: 2026-03-08 19:27
+==================================================
+  Honest R² Score    : 0.7038
+  Hourly MAE         : 119.9 Watts
+--------------------------------------------------
+  True Total Energy  : 3550.67 kWh
+  Pred Total Energy  : 4347.12 kWh
+  Energy Error (%)   : 22.43%
+--------------------------------------------------
+  Actual System COP  : 3.842
+  Predicted COP      : 3.138
+  COP Error (%)      : 18.32%
+==================================================
+
+TOP 10 FEATURE IMPORTANCES:
+  heating_on_lag1        0.3828  ████████████████████████████████████████████████████████████████████████████
+  elec_lag1              0.2714  ██████████████████████████████████████████████████████
+  heatpump_outsideT      0.1437  ████████████████████████████
+  outsideT_3h_avg        0.0438  ████████
+  flowT_lag1             0.0307  ██████
+  capacity_kw            0.0279  █████
+  returnT_lag1           0.0256  █████
+  temp_deficit           0.0222  ████
+  hour                   0.0162  ███
+  month                  0.0157  ███
+
+NOTE: R² of 0.68–0.88 is HONEST.
+R² > 0.97 with flowT/returnT = DATA LEAKAGE (fake score).
+==================================================
