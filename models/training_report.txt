@@ -1,31 +1,43 @@
-==================================================
-       DAIKIN HEAT PUMP — TRAINING REPORT
-       Generated: 2026-03-08 19:27
-==================================================
-  Honest R² Score    : 0.7038
-  Hourly MAE         : 119.9 Watts
---------------------------------------------------
+=======================================================
+       DAIKIN HEAT PUMP — TRAINING REPORT V2
+       Generated: 2026-03-11 22:04
+=======================================================
+  Honest R² Score    : 0.8604
+  Hourly MAE         : 55.6 Watts
+-------------------------------------------------------
   True Total Energy  : 3550.67 kWh
-  Pred Total Energy  : 4347.12 kWh
-  Energy Error (%)   : 22.43%
---------------------------------------------------
+  Pred Total Energy  : 3821.21 kWh
+  Energy Error (%)   : 7.62%
+-------------------------------------------------------
   Actual System COP  : 3.842
-  Predicted COP      : 3.138
-  COP Error (%)      : 18.32%
-==================================================
+  Predicted COP      : 3.570
+  COP Error (%)      : 7.08%
+=======================================================
 
-TOP 10 FEATURE IMPORTANCES:
-  heating_on_lag1        0.3828  ████████████████████████████████████████████████████████████████████████████
-  elec_lag1              0.2714  ██████████████████████████████████████████████████████
-  heatpump_outsideT      0.1437  ████████████████████████████
-  outsideT_3h_avg        0.0438  ████████
-  flowT_lag1             0.0307  ██████
-  capacity_kw            0.0279  █████
-  returnT_lag1           0.0256  █████
-  temp_deficit           0.0222  ████
-  hour                   0.0162  ███
-  month                  0.0157  ███
+TOP 15 FEATURE IMPORTANCES:
+  elec_lag1                 0.2339  ██████████████████████████████████████████████
+  heating_on_lag1           0.2137  ██████████████████████████████████████████
+  run_hours                 0.1270  █████████████████████████
+  elec_lag1_pct             0.0854  █████████████████
+  hdh                       0.0654  █████████████
+  heatpump_outsideT         0.0464  █████████
+  elec_lag24                0.0366  ███████
+  outsideT_3h_avg           0.0266  █████
+  flowT_lag1                0.0168  ███
+  returnT_lag1              0.0165  ███
+  temp_deficit              0.0150  ███
+  capacity_kw               0.0134  ██
+  cop_lag1                  0.0127  ██
+  elec_lag168               0.0121  ██
+  heating_on_lag24          0.0118  ██
 
-NOTE: R² of 0.68–0.88 is HONEST.
-R² > 0.97 with flowT/returnT = DATA LEAKAGE (fake score).
-==================================================
+DIAGNOSTIC NOTES:
+  Top feature: elec_lag1 (23.4%)
+  ✅ Feature importance well distributed.
+  ✅ Energy Error 7.6% — good for client reporting.
+
+TARGETS:
+  R² > 0.83 | MAE < 90W | Energy Error < 10% | COP Error < 8%
+
+NOTE: R² > 0.97 with flowT/returnT = DATA LEAKAGE.
+=======================================================
