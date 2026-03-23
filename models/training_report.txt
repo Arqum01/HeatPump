@@ -1,43 +1,63 @@
-=======================================================
-       DAIKIN HEAT PUMP — TRAINING REPORT V2
-       Generated: 2026-03-11 22:04
-=======================================================
-  Honest R² Score    : 0.8604
-  Hourly MAE         : 55.6 Watts
--------------------------------------------------------
-  True Total Energy  : 3550.67 kWh
-  Pred Total Energy  : 3821.21 kWh
-  Energy Error (%)   : 7.62%
--------------------------------------------------------
-  Actual System COP  : 3.842
-  Predicted COP      : 3.570
-  COP Error (%)      : 7.08%
-=======================================================
+================================================================
+DAIKIN HEAT PUMP - DUAL TARGET TRAINING REPORT V3
+Generated: 2026-03-23 06:19
+================================================================
 
-TOP 15 FEATURE IMPORTANCES:
-  elec_lag1                 0.2339  ██████████████████████████████████████████████
-  heating_on_lag1           0.2137  ██████████████████████████████████████████
-  run_hours                 0.1270  █████████████████████████
-  elec_lag1_pct             0.0854  █████████████████
-  hdh                       0.0654  █████████████
-  heatpump_outsideT         0.0464  █████████
-  elec_lag24                0.0366  ███████
-  outsideT_3h_avg           0.0266  █████
-  flowT_lag1                0.0168  ███
-  returnT_lag1              0.0165  ███
-  temp_deficit              0.0150  ███
-  capacity_kw               0.0134  ██
-  cop_lag1                  0.0127  ██
-  elec_lag168               0.0121  ██
-  heating_on_lag24          0.0118  ██
+TARGET 1: ELECTRICITY (heatpump_elec)
+R2: 0.7611 | Threshold > 0.80 | PASS=False
+MAE: 96.8 W | Threshold < 90W | PASS=False
 
-DIAGNOSTIC NOTES:
-  Top feature: elec_lag1 (23.4%)
-  ✅ Feature importance well distributed.
-  ✅ Energy Error 7.6% — good for client reporting.
+TARGET 2: HEAT OUTPUT (heatpump_heat)
+R2: 0.7675 | Threshold > 0.80 | PASS=False
+MAE: 292.2 W | Threshold < 120W | PASS=False
 
-TARGETS:
-  R² > 0.83 | MAE < 90W | Energy Error < 10% | COP Error < 8%
+AGGREGATE ENERGY METRICS
+Electricity true/pred kWh: 5787.95 / 5841.34
+Heat true/pred kWh: 22176.92 / 22166.83
+Energy Error: 0.92% | Threshold < 5% | PASS=True
+Heat Error: 0.05% | Threshold < 5% | PASS=True
 
-NOTE: R² > 0.97 with flowT/returnT = DATA LEAKAGE.
-=======================================================
+COP VALIDATION (predicted heat / predicted electricity)
+True COP: 3.832
+Pred COP: 3.795
+COP Error: 0.96% | Threshold < 6% | PASS=True
+Physical COP valid rate: 100.00%
+Physical COP invalid count: 0 | Must be 0 | PASS=True
+COP guardrail adjustments: 0
+OFF-state forced-zero count: 806
+
+ON/OFF CLASSIFIER DIAGNOSTICS
+Confusion matrix [ [TN, FP], [FN, TP] ]: [[806, 0], [0, 9389]]
+True-ON predicted OFF (FN): 0
+
+LEAKAGE GUARD
+Leakage flag (R2 > 0.97): False | PASS=True
+
+OVERALL GATE: FAIL
+Saved electricity model: models/xgb_elec_v20260323.json
+Saved heat model: models/xgb_heat_v20260323.json
+
+TOP 10 ELECTRICITY FEATURES
+- hdh: 0.2503
+- heating_on_lag1: 0.1131
+- heatpump_outsideT: 0.1006
+- elec_lag1: 0.0688
+- elec_lag24: 0.0332
+- run_hours: 0.0311
+- capacity_kw: 0.0260
+- cop_lag1: 0.0260
+- was_defrost_lag1: 0.0244
+- elec_lag2: 0.0229
+
+TOP 10 HEAT FEATURES
+- heat_lag24: 0.1057
+- heat_lag1: 0.0921
+- heating_on_lag1: 0.0873
+- capacity_kw: 0.0458
+- elec_lag1: 0.0390
+- flowT_lag1: 0.0352
+- elec_lag24: 0.0346
+- hdh: 0.0325
+- was_defrost_lag1: 0.0318
+- run_hours: 0.0309
+================================================================

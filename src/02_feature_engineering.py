@@ -252,7 +252,26 @@ def add_extended_lag_features(df: pd.DataFrame) -> pd.DataFrame:
     # FIX 2: Extended time lags
     df["elec_lag24"]       = g["heatpump_elec"].shift(24)    # Same hour yesterday
     df["elec_lag168"]      = g["heatpump_elec"].shift(168)   # Same hour last week
+    df["heat_lag1"]        = g["heatpump_heat"].shift(1)
+    df["heat_lag24"]       = g["heatpump_heat"].shift(24)
+    df["heat_lag168"]      = g["heatpump_heat"].shift(168)
     df["heating_on_lag24"] = g["heating_on"].shift(24)       # Was pump on yesterday at this hour?
+
+        # "How much heat was the house absorbing last hour?"
+    # flowT_lag1 and returnT_lag1 already exist — just compute the difference
+    df["deltaT_house_lag1"] = df["flowT_lag1"] - df["returnT_lag1"]
+
+    # "How hard was the pump working against physics last hour?"
+    # flowT_lag1 is lagged (safe), outsideT is current (known from forecast)
+    df["deltaT_lift_lag1"]  = df["flowT_lag1"] - df["heatpump_outsideT"]
+
+    # lift normalised by capacity — how hard per kW of system size
+    df["lift_per_kw_lag1"]  = df["deltaT_lift_lag1"] / df["capacity_kw"]
+
+    df["elec_lag2"] = g["heatpump_elec"].shift(2)   # 2 hours ago
+    df["elec_lag3"] = g["heatpump_elec"].shift(3)   # 3 hours ago
+    df["elec_lag4"] = g["heatpump_elec"].shift(4)
+    df["elec_lag6"] = g["heatpump_elec"].shift(6)
 
     # FIX 2: Consecutive run hours
     # Logic: if heating_on != heating_on_last_hour, it's a new "run block"
@@ -275,6 +294,22 @@ def add_extended_lag_features(df: pd.DataFrame) -> pd.DataFrame:
     df["elec_lag1_pct"] = df["elec_lag1"] / (df["capacity_kw"] * 1000)
 
     logging.info("Extended lag features created.")
+    return df
+
+
+def add_metadata_features(df: pd.DataFrame) -> pd.DataFrame:
+    if "emitter_type" not in df.columns:
+        df["emitter_type"] = "UNKNOWN"
+    if "location_zone" not in df.columns:
+        df["location_zone"] = "UNKNOWN"
+
+    emitter = df["emitter_type"].fillna("UNKNOWN").astype(str).str.upper().str.replace(" ", "_", regex=False)
+    zone = df["location_zone"].fillna("UNKNOWN").astype(str).str.upper().str.replace(" ", "_", regex=False)
+
+    emitter_dummies = pd.get_dummies(emitter, prefix="emitter", dtype=float)
+    zone_dummies = pd.get_dummies(zone, prefix="zone", dtype=float)
+
+    df = pd.concat([df, emitter_dummies, zone_dummies], axis=1)
     return df
 
 
@@ -307,6 +342,7 @@ def main():
     df = add_lag_features(df)
     df = add_extended_lag_features(df)
     df = add_rolling_features(df)
+    df = add_metadata_features(df)
 
     # 3. Save
     df.to_csv(OUTPUT_PATH, index=False)
