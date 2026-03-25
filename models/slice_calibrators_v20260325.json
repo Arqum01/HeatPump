@@ -1,0 +1,44 @@
+{
+  "44|8": {
+    "system_id": 44,
+    "capacity_kw": 8,
+    "elec_mult": 1.1133397127967928,
+    "heat_mult": 1.1146237572032236
+  },
+  "162|6": {
+    "system_id": 162,
+    "capacity_kw": 6,
+    "elec_mult": 1.0647254785281177,
+    "heat_mult": 1.0732065627007084
+  },
+  "228|4": {
+    "system_id": 228,
+    "capacity_kw": 4,
+    "elec_mult": 1.0936673030796693,
+    "heat_mult": 1.1202767726575626
+  },
+  "351|6": {
+    "system_id": 351,
+    "capacity_kw": 6,
+    "elec_mult": 1.0880669110628594,
+    "heat_mult": 1.07391040713868
+  },
+  "364|8": {
+    "system_id": 364,
+    "capacity_kw": 8,
+    "elec_mult": 1.0697931055708447,
+    "heat_mult": 1.073477349403782
+  },
+  "587|6": {
+    "system_id": 587,
+    "capacity_kw": 6,
+    "elec_mult": 1.0528332051372986,
+    "heat_mult": 1.0484198078545333
+  },
+  "615|8": {
+    "system_id": 615,
+    "capacity_kw": 8,
+    "elec_mult": 1.0541441784836767,
+    "heat_mult": 1.0628365895522052
+  }
+}
