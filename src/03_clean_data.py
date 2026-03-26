@@ -24,16 +24,16 @@ RULES = {
     "heatpump_heat_min":  0,
 
     # COP bounds include defrost behavior and high-efficiency operation.
-    "cop_min":  0.0,
-    "cop_max":  8.0,
+    "cop_min":  float(os.getenv("CLEAN_COP_MIN", "0.0")),
+    "cop_max":  float(os.getenv("CLEAN_COP_MAX", "8.0")),
 
     # Delta-T bounds protect against sensor spikes while retaining startup events.
     "deltaT_house_min":  0.0,
     "deltaT_house_max":  20.0,
 
     # Outdoor temperature guardrails cover realistic local extremes.
-    "outsideT_min": -20,
-    "outsideT_max":  40,
+    "outsideT_min": float(os.getenv("CLEAN_OUTSIDE_T_MIN", "-20")),
+    "outsideT_max":  float(os.getenv("CLEAN_OUTSIDE_T_MAX", "40")),
 }
 
 # Missing-value policy is anchored to target columns only.

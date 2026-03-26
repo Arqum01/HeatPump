@@ -72,8 +72,18 @@ def summarize_batch_monitoring(
 
     if reference_df is not None:
         # Estimate first-order drift against a reference batch.
-        ref_numeric = reference_df[numeric_input_cols].select_dtypes(include=[np.number])
-        cur_numeric = input_df[numeric_input_cols].select_dtypes(include=[np.number])
+        common_numeric_cols = [
+            c for c in numeric_input_cols
+            if c in reference_df.columns
+        ]
+
+        if not common_numeric_cols:
+            summary["feature_mean_shift_zscore"] = {}
+            summary["alerts"].append("no_common_numeric_columns_for_drift")
+            return summary
+
+        ref_numeric = reference_df[common_numeric_cols].select_dtypes(include=[np.number])
+        cur_numeric = input_df[common_numeric_cols].select_dtypes(include=[np.number])
 
         drift = {}
         for col in cur_numeric.columns:

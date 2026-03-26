@@ -39,15 +39,15 @@ FEEDS = [
 # Window strategies:
 # - fixed_window: use START and END directly.
 # - max_available: attempt a broad historical pull and fallback if needed.
-FETCH_MODE = "fixed_window"  # or "max_available"
-START = "01-01-2021"
-END = "01-02-2026"
+FETCH_MODE = os.getenv("FETCH_MODE", "fixed_window").strip().lower()  # or "max_available"
+START = os.getenv("START_DATE", "01-01-2023").strip()
+END = os.getenv("END_DATE", "01-02-2026").strip()
 VERY_EARLY_START = "01-01-2010"
 
 RAW_DIR = "data/raw"
 API_URL = "https://heatpumpmonitor.org/timeseries/data"
 LIMIT_ERROR_TOKEN = "request datapoint limit reached"
-API_MAX_DATAPOINTS = 70000
+API_MAX_DATAPOINTS = int(os.getenv("API_MAX_DATAPOINTS", "70000"))
 
 os.makedirs(RAW_DIR, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -247,6 +247,7 @@ async def main():
     writes one CSV per system, and emits an audit-style fetch log.
     """
     fetch_log = []
+    quality_rows = []
 
     logging.info(
         "Date window resolved: %s -> %s (mode=%s)",
@@ -267,33 +268,68 @@ async def main():
             df.to_csv(out_path, index=False)
             logging.info("System %s saved -> %s | Shape: %s", sid, out_path, df.shape)
 
-            missing_pct = df["heatpump_elec"].isna().mean() * 100
+            # Compute feed-level missingness for audit visibility before cleaning.
+            feed_missing_pct = {}
+            for feed in FEEDS:
+                feed_missing_pct[f"missing_{feed}_pct"] = round(df[feed].isna().mean() * 100, 2)
+
+            missing_elec_pct = feed_missing_pct["missing_heatpump_elec_pct"]
+            missing_heat_pct = feed_missing_pct["missing_heatpump_heat_pct"]
+
+            quality_rows.append(
+                {
+                    "system_id": sid,
+                    "capacity_kw": system["capacity_kw"],
+                    "rows": len(df),
+                    **feed_missing_pct,
+                    "status": "SUCCESS",
+                }
+            )
+
             fetch_log.append(
                 {
                     "system_id": sid,
                     "capacity_kw": system["capacity_kw"],
                     "rows": len(df),
-                    "missing_elec_pct": round(missing_pct, 2),
+                    "missing_elec_pct": missing_elec_pct,
+                    "missing_heat_pct": missing_heat_pct,
                     "status": "SUCCESS",
                     "error": "",
                 }
             )
         else:
+            quality_rows.append(
+                {
+                    "system_id": sid,
+                    "capacity_kw": system["capacity_kw"],
+                    "rows": 0,
+                    **{f"missing_{feed}_pct": 100.0 for feed in FEEDS},
+                    "status": "FAILED",
+                }
+            )
+
             fetch_log.append(
                 {
                     "system_id": sid,
                     "capacity_kw": system["capacity_kw"],
                     "rows": 0,
                     "missing_elec_pct": 100,
+                    "missing_heat_pct": 100,
+
                     "status": "FAILED",
                     "error": error,
                 }
             )
 
     log_df = pd.DataFrame(fetch_log)
+    quality_df = pd.DataFrame(quality_rows)
     log_df.to_csv(f"{RAW_DIR}/fetch_log.csv", index=False)
+    quality_df.to_csv(f"{RAW_DIR}/fetch_quality_audit.csv", index=False)
     logging.info("Fetch log saved to %s/fetch_log.csv", RAW_DIR)
+    logging.info("Fetch quality audit saved to %s/fetch_quality_audit.csv", RAW_DIR)
     print("\n" + log_df.to_string(index=False))
+    print("\n--- Data Quality Audit (Missingness % by Feed) ---")
+    print(quality_df.to_string(index=False))
 
 
 if __name__ == "__main__":

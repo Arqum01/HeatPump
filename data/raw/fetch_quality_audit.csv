@@ -1,0 +1,8 @@
+system_id,capacity_kw,rows,missing_heatpump_elec_pct,missing_heatpump_heat_pct,missing_heatpump_returnT_pct,missing_heatpump_flowT_pct,missing_heatpump_roomT_pct,missing_heatpump_outsideT_pct,missing_heatpump_flowrate_pct,status
+615,8,27048,70.01,70.01,70.01,70.01,70.01,66.29,70.01,SUCCESS
+364,8,27048,54.95,54.95,54.95,54.95,52.19,51.64,54.95,SUCCESS
+44,8,27048,11.17,10.53,10.53,10.53,34.72,6.4,10.53,SUCCESS
+162,6,27048,13.87,13.84,9.48,9.48,15.95,15.9,34.97,SUCCESS
+351,6,27048,56.42,56.42,56.42,56.42,56.44,35.16,56.42,SUCCESS
+587,6,27048,67.37,68.09,68.09,68.09,67.48,62.47,68.09,SUCCESS
+228,4,27048,41.9,41.9,41.9,41.9,100.0,42.69,41.9,SUCCESS

@@ -18,10 +18,10 @@ RAW_DIR       = "data/raw"
 PROCESSED_DIR = "data/processed"
 OUTPUT_PATH   = f"{PROCESSED_DIR}/daikin_features.csv"
 
-STANDBY_THRESHOLD_W = 50    # Below this = standby(10W documented), not real heating
+STANDBY_THRESHOLD_W = float(os.getenv("FE_STANDBY_THRESHOLD_W", "50"))    # Below this = standby(10W documented), not real heating
 
 # Heating degree hour baseline used in demand proxy calculations.
-BASE_TEMP = 15.5
+BASE_TEMP = float(os.getenv("FE_BASE_TEMP", "15.5"))
 
 os.makedirs(PROCESSED_DIR, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")

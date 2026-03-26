@@ -35,7 +35,7 @@ SLICE_CALIBRATOR_PATH_TEMPLATE = f"{MODEL_DIR}/slice_calibrators_v{{run_tag}}.js
 TARGET_ELEC = "heatpump_elec"
 TARGET_HEAT = "heatpump_heat"
 
-FEATURE_POLICY_MODE = "enhanced_onestep"
+FEATURE_POLICY_MODE = os.getenv("FEATURE_POLICY_MODE", "enhanced_onestep").strip().lower()
 TARGET_STRATEGY_CANDIDATES = ["none", "log1p_both", "cop_ratio_heat"]
 WALK_FORWARD_SPLITS = 3
 ENABLE_WALK_FORWARD_TUNING = True
@@ -43,6 +43,11 @@ ENABLE_SLICE_CALIBRATION = True
 # allowed values:
 # "strict_production"  -> only features known safely at prediction time
 # "enhanced_onestep"   -> allows lagged observed telemetry from previous hours
+
+if FEATURE_POLICY_MODE not in {"strict_production", "enhanced_onestep"}:
+    raise ValueError(
+        "FEATURE_POLICY_MODE must be 'strict_production' or 'enhanced_onestep'"
+    )
 
 BASE_COMMON_FEATURES = [
     "heatpump_outsideT",

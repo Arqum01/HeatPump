@@ -1,0 +1,46 @@
+{
+  "generated_at": "2026-03-26T17:54:24.777891",
+  "input_rows": 100,
+  "prediction_rows": 100,
+  "successful_prediction_rate": 1.0,
+  "top_null_rate_features": {
+    "heatpump_roomT": 1.0,
+    "load_ratio": 1.0,
+    "temp_deficit": 1.0,
+    "heat_lag168": 1.0,
+    "elec_lag168": 1.0,
+    "cop_lag1": 0.53,
+    "cop": 0.52,
+    "elec_lag24": 0.24,
+    "heat_lag24": 0.23,
+    "elec_lag6": 0.06
+  },
+  "prediction_ranges": {
+    "pred_heatpump_elec_min": 50.0,
+    "pred_heatpump_elec_max": 705.8822004671138,
+    "pred_heatpump_heat_min": 0.0,
+    "pred_heatpump_heat_max": 2605.502063621604,
+    "pred_cop_min": 0.0,
+    "pred_cop_max": 4.061753945342337
+  },
+  "runtime_classifier": {
+    "predicted_on_rate": 0.29,
+    "predicted_off_rate": 0.71
+  },
+  "guardrail_counts": {
+    "cop_guardrail_adjusted_count": 0
+  },
+  "alerts": [],
+  "feature_mean_shift_zscore": {
+    "heatpump_roomT": NaN,
+    "system_id": 1.2157346793796557,
+    "capacity_kw": 1.12732834100717,
+    "cop": 0.8755146148002213,
+    "temp_deficit": NaN,
+    "load_ratio": NaN,
+    "month_cos": 1.111924988629676,
+    "elec_lag168": NaN,
+    "heat_lag168": NaN,
+    "system_44": 2.0311190867317275
+  }
+}
