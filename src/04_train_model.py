@@ -102,6 +102,36 @@ HEAT_MEMORY_FEATURES = [
 os.makedirs(MODEL_DIR, exist_ok=True)
 
 
+def parse_train_system_ids() -> list[int] | None:
+    """Parse optional training system selection from environment.
+
+    Supported variables (first non-empty wins):
+    - TRAIN_SYSTEM_IDS
+    - SYSTEM_IDS
+    """
+    raw = os.getenv("TRAIN_SYSTEM_IDS", "").strip()
+    if not raw:
+        raw = os.getenv("SYSTEM_IDS", "").strip()
+    if not raw:
+        return None
+
+    ids = []
+    seen = set()
+    for token in raw.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        try:
+            sid = int(token)
+        except ValueError:
+            continue
+        if sid not in seen:
+            seen.add(sid)
+            ids.append(sid)
+
+    return ids if ids else None
+
+
 def model_hyperparams(label: str) -> dict:
     """Return baseline XGBoost hyperparameters for a target label.
 
@@ -160,6 +190,16 @@ def load_data() -> tuple[pd.DataFrame, list[str], list[str]]:
     """
     df = pd.read_csv(INPUT_PATH, parse_dates=["timestamp"])
     df = df.sort_values(["timestamp", "system_id"]).reset_index(drop=True)
+
+    selected_systems = parse_train_system_ids()
+    if selected_systems:
+        df = df[df["system_id"].isin(selected_systems)].copy()
+        if df.empty:
+            raise ValueError(
+                f"No rows found for selected training systems: {selected_systems}. "
+                "Check TRAIN_SYSTEM_IDS/SYSTEM_IDS or regenerate data."
+            )
+        print(f"Training system filter applied: {selected_systems}")
 
     elec_features, heat_features = build_feature_lists(df)
 
@@ -1295,7 +1335,7 @@ def main():
     walk-forward tuning, target-strategy search, slice calibration, evaluation,
     and report/manifest writing.
     """
-    run_tag = datetime.now().strftime("%Y%m%d")
+    run_tag = f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{FEATURE_POLICY_MODE}"
     df, elec_features, heat_features = load_data()
     print(f"Electricity feature count: {len(elec_features)}")
     print(f"Heat feature count: {len(heat_features)}")

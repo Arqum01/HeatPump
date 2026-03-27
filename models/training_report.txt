@@ -1,29 +1,29 @@
 ================================================================
 DAIKIN HEAT PUMP - DUAL TARGET TRAINING REPORT V4
-Generated: 2026-03-26 17:53
+Generated: 2026-03-27 15:48
 ================================================================
 
 SCIENCE METRICS
 TARGET 1: ELECTRICITY (heatpump_elec)
-R2: 0.4274 | Threshold > 0.80 | PASS=False
-MAE: 187.6 W | Threshold < 90W | PASS=False
+R2: 0.7375 | Threshold > 0.80 | PASS=False
+MAE: 129.7 W | Threshold < 90W | PASS=False
 
 TARGET 2: HEAT OUTPUT (heatpump_heat)
-R2: 0.3837 | Threshold > 0.80 | PASS=False
-MAE: 646.0 W | Threshold < 120W | PASS=False
+R2: 0.7713 | Threshold > 0.80 | PASS=False
+MAE: 400.3 W | Threshold < 120W | PASS=False
 
 BUSINESS METRICS
-Electricity true/pred kWh: 9411.66 / 10850.34
-Heat true/pred kWh: 36667.44 / 39407.06
-Energy Error: 15.29% | Threshold < 5% | PASS=False
-Heat Error: 7.47% | Threshold < 5% | PASS=False
-True COP: 3.896
-Pred COP: 3.632
-COP Error: 6.78% | Threshold < 6% | PASS=False
+Electricity true/pred kWh: 1489.88 / 1567.06
+Heat true/pred kWh: 5967.82 / 6131.47
+Energy Error: 5.18% | Threshold < 5% | PASS=False
+Heat Error: 2.74% | Threshold < 5% | PASS=True
+True COP: 4.006
+Pred COP: 3.913
+COP Error: 2.32% | Threshold < 6% | PASS=True
 Physical COP valid rate: 100.00%
 Physical COP invalid count: 0 | Must be 0 | PASS=True
 Leakage flag (R2 > 0.97): False | PASS=True
-Runtime false-negative count: 1895 | Must be 0 | PASS=False
+Runtime false-negative count: 0 | Must be 0 | PASS=True
 
 DEPLOYMENT STATUS
 Business gate: FAIL
@@ -35,63 +35,58 @@ TARGET STRATEGY TESTING
 Selected strategy: log1p_both
 
 ON/OFF CLASSIFIER DIAGNOSTICS
-Confusion matrix [ [TN, FP], [FN, TP] ]: [[9186, 1724], [1895, 13885]]
-True-ON predicted OFF (FN): 1895
+Confusion matrix [ [TN, FP], [FN, TP] ]: [[1004, 0], [0, 2162]]
+True-ON predicted OFF (FN): 0
 
-Saved feature schema: models/feature_schema_v20260326.json
-Saved electricity model: models/xgb_elec_v20260326.json
-Saved heat model: models/xgb_heat_v20260326.json
+Saved feature schema: models/feature_schema_v20260327_154809_982085_enhanced_onestep.json
+Saved electricity model: models/xgb_elec_v20260327_154809_982085_enhanced_onestep.json
+Saved heat model: models/xgb_heat_v20260327_154809_982085_enhanced_onestep.json
 
-Saved runtime classifier: models/xgb_runtime_clf_v20260326.joblib
-Saved electricity imputer: models/imputer_elec_v20260326.joblib
-Saved heat imputer: models/imputer_heat_v20260326.joblib
-Saved pipeline metadata: models/pipeline_meta_v20260326.json
-Saved slice calibrators: models/slice_calibrators_v20260326.json
+Saved runtime classifier: models/xgb_runtime_clf_v20260327_154809_982085_enhanced_onestep.joblib
+Saved electricity imputer: models/imputer_elec_v20260327_154809_982085_enhanced_onestep.joblib
+Saved heat imputer: models/imputer_heat_v20260327_154809_982085_enhanced_onestep.joblib
+Saved pipeline metadata: models/pipeline_meta_v20260327_154809_982085_enhanced_onestep.json
+Saved slice calibrators: models/slice_calibrators_v20260327_154809_982085_enhanced_onestep.json
 TOP 10 ELECTRICITY FEATURES
 Strategy leaderboard (lower total MAE is better):
-- log1p_both: total_mae=1451.06, mae_elec=298.06, mae_heat=1153.00
-- none: total_mae=1742.91, mae_elec=375.18, mae_heat=1367.73
-- cop_ratio_heat: total_mae=1834.71, mae_elec=375.18, mae_heat=1459.53
+- log1p_both: total_mae=1029.86, mae_elec=253.99, mae_heat=775.87
+- none: total_mae=1476.29, mae_elec=328.54, mae_heat=1147.75
+- cop_ratio_heat: total_mae=1518.39, mae_elec=328.54, mae_heat=1189.85
 
 Walk-forward tuning summary:
-- electricity candidate 1: avg_mae=260.68W params={'n_estimators': 2200, 'learning_rate': 0.02, 'max_depth': 7, 'min_child_weight': 8}
-- electricity candidate 2: avg_mae=259.78W params={'n_estimators': 2640, 'learning_rate': 0.015, 'max_depth': 7, 'min_child_weight': 8}
-- electricity candidate 3: avg_mae=261.01W params={'n_estimators': 1870, 'learning_rate': 0.025, 'max_depth': 7, 'min_child_weight': 8}
-- electricity candidate 4: avg_mae=259.68W params={'n_estimators': 2200, 'learning_rate': 0.02, 'max_depth': 6, 'min_child_weight': 10}
-- electricity candidate 5: avg_mae=261.08W params={'n_estimators': 2200, 'learning_rate': 0.02, 'max_depth': 8, 'min_child_weight': 6}
-- heat candidate 1: avg_mae=803.47W params={'n_estimators': 2600, 'learning_rate': 0.015, 'max_depth': 8, 'min_child_weight': 6}
-- heat candidate 2: avg_mae=801.50W params={'n_estimators': 3120, 'learning_rate': 0.01125, 'max_depth': 8, 'min_child_weight': 6}
-- heat candidate 3: avg_mae=803.30W params={'n_estimators': 2210, 'learning_rate': 0.01875, 'max_depth': 8, 'min_child_weight': 6}
-- heat candidate 4: avg_mae=800.42W params={'n_estimators': 2600, 'learning_rate': 0.015, 'max_depth': 7, 'min_child_weight': 8}
-- heat candidate 5: avg_mae=805.63W params={'n_estimators': 2600, 'learning_rate': 0.015, 'max_depth': 9, 'min_child_weight': 4}
+- electricity candidate 1: avg_mae=197.30W params={'n_estimators': 2200, 'learning_rate': 0.02, 'max_depth': 7, 'min_child_weight': 8}
+- electricity candidate 2: avg_mae=199.12W params={'n_estimators': 2640, 'learning_rate': 0.015, 'max_depth': 7, 'min_child_weight': 8}
+- electricity candidate 3: avg_mae=198.31W params={'n_estimators': 1870, 'learning_rate': 0.025, 'max_depth': 7, 'min_child_weight': 8}
+- electricity candidate 4: avg_mae=196.61W params={'n_estimators': 2200, 'learning_rate': 0.02, 'max_depth': 6, 'min_child_weight': 10}
+- electricity candidate 5: avg_mae=205.05W params={'n_estimators': 2200, 'learning_rate': 0.02, 'max_depth': 8, 'min_child_weight': 6}
+- heat candidate 1: avg_mae=561.47W params={'n_estimators': 2600, 'learning_rate': 0.015, 'max_depth': 8, 'min_child_weight': 6}
+- heat candidate 2: avg_mae=559.91W params={'n_estimators': 3120, 'learning_rate': 0.01125, 'max_depth': 8, 'min_child_weight': 6}
+- heat candidate 3: avg_mae=559.18W params={'n_estimators': 2210, 'learning_rate': 0.01875, 'max_depth': 8, 'min_child_weight': 6}
+- heat candidate 4: avg_mae=558.36W params={'n_estimators': 2600, 'learning_rate': 0.015, 'max_depth': 7, 'min_child_weight': 8}
+- heat candidate 5: avg_mae=568.15W params={'n_estimators': 2600, 'learning_rate': 0.015, 'max_depth': 9, 'min_child_weight': 4}
 
 Slice error analysis (top 6 worst heat MAE):
-- system=228 capacity=4kW rows=3514 mae_elec=454.0W mae_heat=1622.4W r2_elec=-1.604 r2_heat=-2.060
-- system=162 capacity=6kW rows=4363 mae_elec=372.2W mae_heat=1452.2W r2_elec=-0.466 r2_heat=-0.504
-- system=615 capacity=8kW rows=4380 mae_elec=305.9W mae_heat=1292.5W r2_elec=-0.774 r2_heat=-0.727
-- system=44 capacity=8kW rows=3018 mae_elec=361.2W mae_heat=1228.9W r2_elec=0.136 r2_heat=0.035
-- system=351 capacity=6kW rows=4115 mae_elec=316.5W mae_heat=1207.0W r2_elec=0.062 r2_heat=-0.120
-- system=587 capacity=6kW rows=4379 mae_elec=312.7W mae_heat=1149.2W r2_elec=0.187 r2_heat=-0.080
-- hdh: 0.2104
-- heatpump_outsideT: 0.1702
-- capacity_kw: 0.0470
-- system_162: 0.0443
-- system_351: 0.0439
-- system_364: 0.0422
-- system_228: 0.0410
-- system_44: 0.0388
-- month_cos: 0.0383
-- hour_cos: 0.0375
+- system=44 capacity=8kW rows=3166 mae_elec=281.0W mae_heat=857.2W r2_elec=0.368 r2_heat=0.481
+- elec_lag1: 0.1333
+- elec_lag1_pct: 0.1149
+- hdh: 0.0585
+- is_heating_season: 0.0499
+- elec_lag24: 0.0448
+- heatpump_outsideT: 0.0406
+- outsideT_3h_avg: 0.0365
+- run_hours: 0.0358
+- hour_sin: 0.0326
+- cop_lag1: 0.0288
 
 TOP 10 HEAT FEATURES
-- hdh: 0.1216
-- heatpump_outsideT: 0.0709
-- system_44: 0.0684
-- system_228: 0.0660
-- system_364: 0.0593
-- system_351: 0.0587
-- month_cos: 0.0562
-- capacity_kw: 0.0549
-- system_id: 0.0501
-- system_162: 0.0472
+- heat_lag24: 0.0944
+- was_defrost_lag1: 0.0739
+- heating_on_lag1: 0.0625
+- run_hours: 0.0551
+- elec_lag1_pct: 0.0446
+- heat_lag1: 0.0427
+- elec_lag1: 0.0411
+- month_cos: 0.0356
+- heatpump_roomT: 0.0330
+- elec_lag3: 0.0310
 ================================================================

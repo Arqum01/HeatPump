@@ -7,6 +7,7 @@ Concepts:
 """
 
 import asyncio
+import json
 import logging
 import os
 from datetime import datetime, timedelta, timezone
@@ -16,7 +17,7 @@ import pandas as pd
 
 
 # Systems and metadata used throughout the pipeline.
-SYSTEMS = [
+DEFAULT_SYSTEMS = [
     {"system_id": 615, "capacity_kw": 8},
     {"system_id": 364, "capacity_kw": 8},
     {"system_id": 44, "capacity_kw": 8},
@@ -25,6 +26,120 @@ SYSTEMS = [
     {"system_id": 587, "capacity_kw": 6},
     {"system_id": 228, "capacity_kw": 4},
 ]
+
+
+def parse_system_id_filter_from_env() -> list[int] | None:
+    """Parse optional system-id filter from environment.
+
+    Supported variables (first non-empty wins):
+    - SYSTEM_IDS
+    - SYSTEM_ID_FILTER
+
+    Format:
+    - CSV of numeric IDs: 615,44,228
+    """
+    raw = os.getenv("SYSTEM_IDS", "").strip()
+    if not raw:
+        raw = os.getenv("SYSTEM_ID_FILTER", "").strip()
+    if not raw:
+        return None
+
+    ids = []
+    seen = set()
+    for token in raw.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        try:
+            sid = int(token)
+        except ValueError:
+            continue
+        if sid not in seen:
+            seen.add(sid)
+            ids.append(sid)
+
+    return ids if ids else None
+
+
+def parse_systems_from_env() -> list[dict]:
+    """Parse optional custom systems from environment variable.
+
+    Supported formats in SYSTEMS_CONFIG:
+    - JSON list: [{"system_id": 44, "capacity_kw": 8}, ...]
+    - CSV-like: 44:8,162:6,228:4
+    """
+    raw = os.getenv("SYSTEMS_CONFIG", "").strip()
+    id_filter = parse_system_id_filter_from_env()
+    if not raw:
+        default_capacity_kw = float(os.getenv("DEFAULT_CAPACITY_KW", "6"))
+        if not id_filter:
+            return DEFAULT_SYSTEMS
+
+        by_id = {item["system_id"]: item for item in DEFAULT_SYSTEMS}
+        selected = []
+        for sid in id_filter:
+            if sid in by_id:
+                selected.append(by_id[sid])
+            else:
+                selected.append({"system_id": sid, "capacity_kw": default_capacity_kw})
+        return selected
+
+    try:
+        parsed_json = json.loads(raw)
+        if isinstance(parsed_json, list):
+            systems = []
+            for item in parsed_json:
+                if not isinstance(item, dict):
+                    continue
+                sid = int(item["system_id"])
+                cap = float(item["capacity_kw"])
+                systems.append({"system_id": sid, "capacity_kw": cap})
+            if systems:
+                if not id_filter:
+                    return systems
+                allowed = set(id_filter)
+                filtered = [s for s in systems if s["system_id"] in allowed]
+                return filtered if filtered else systems
+    except Exception:
+        pass
+
+    systems = []
+    for token in raw.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        if ":" not in token:
+            continue
+        sid_str, cap_str = token.split(":", 1)
+        try:
+            sid = int(sid_str.strip())
+            cap = float(cap_str.strip())
+            systems.append({"system_id": sid, "capacity_kw": cap})
+        except ValueError:
+            continue
+
+    if systems:
+        if not id_filter:
+            return systems
+        allowed = set(id_filter)
+        filtered = [s for s in systems if s["system_id"] in allowed]
+        return filtered if filtered else systems
+
+    default_capacity_kw = float(os.getenv("DEFAULT_CAPACITY_KW", "6"))
+    if not id_filter:
+        return DEFAULT_SYSTEMS
+
+    by_id = {item["system_id"]: item for item in DEFAULT_SYSTEMS}
+    selected = []
+    for sid in id_filter:
+        if sid in by_id:
+            selected.append(by_id[sid])
+        else:
+            selected.append({"system_id": sid, "capacity_kw": default_capacity_kw})
+    return selected
+
+
+SYSTEMS = parse_systems_from_env()
 
 FEEDS = [
     "heatpump_elec",

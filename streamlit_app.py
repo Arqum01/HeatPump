@@ -570,13 +570,23 @@ def execute_stage(
     train_policy_mode: str = "enhanced_onestep",
     custom_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    stage_name_for_label = Path(stage.get("path", "")).name.lower()
+
     if stage["kind"] == "script":
         extra_env: dict[str, str] = {}
-        stage_name = Path(stage.get("path", "")).name.lower()
+        stage_name = stage_name_for_label
         if stage_name == "04_train_model.py":
             extra_env["FEATURE_POLICY_MODE"] = train_policy_mode
 
         custom_options = custom_options or {}
+        system_ids_csv = str(custom_options.get("system_ids", "")).strip()
+        train_system_ids_csv = str(custom_options.get("train_system_ids", "")).strip()
+
+        if system_ids_csv:
+            extra_env["SYSTEM_IDS"] = system_ids_csv
+        if train_system_ids_csv:
+            extra_env["TRAIN_SYSTEM_IDS"] = train_system_ids_csv
+
         if stage_name == "01_fetch_data.py":
             extra_env.update(
                 {
@@ -584,6 +594,8 @@ def execute_stage(
                     "START_DATE": str(custom_options.get("fetch_start", "01-01-2023")),
                     "END_DATE": str(custom_options.get("fetch_end", "01-02-2026")),
                     "API_MAX_DATAPOINTS": str(custom_options.get("fetch_api_max_datapoints", 70000)),
+                    "SYSTEMS_CONFIG": str(custom_options.get("systems_config", "")),
+                    "DEFAULT_CAPACITY_KW": str(custom_options.get("default_capacity_kw", 6.0)),
                 }
             )
         elif stage_name == "02_feature_engineering.py":
@@ -609,7 +621,11 @@ def execute_stage(
     else:
         result = run_monitoring_stage()
     result["stage_id"] = stage["id"]
-    result["stage_label"] = stage["label"]
+    result["stage_label"] = (
+        f"{stage['label']} [{train_policy_mode}]"
+        if stage_name_for_label == "04_train_model.py"
+        else stage["label"]
+    )
     return result
 
 
@@ -710,13 +726,28 @@ def render_pipeline_tab() -> None:
     stop_on_error = st.checkbox("Stop full pipeline on first error", value=True)
     train_policy_mode = st.radio(
         "Train model feature policy (for stage 04)",
-        ["enhanced_onestep", "strict_production"],
+        ["enhanced_onestep", "strict_production", "both"],
         horizontal=True,
         key="pipeline_train_policy_mode",
     )
 
     with st.expander("Custom Pipeline Options", expanded=False):
         st.caption("Set optional stage-level settings before running full pipeline.")
+
+        st.markdown("#### System Selection")
+        ss1, ss2 = st.columns(2)
+        system_ids = ss1.text_input(
+            "SYSTEM_IDS (optional)",
+            value="",
+            help="Comma-separated IDs used by fetch + feature engineering + training. Example: 615,44,228",
+            key="cfg_system_ids",
+        )
+        train_system_ids = ss2.text_input(
+            "TRAIN_SYSTEM_IDS (optional)",
+            value="",
+            help="Optional training-only subset. Example: 615,44",
+            key="cfg_train_system_ids",
+        )
 
         st.markdown("#### 01 Fetch Data")
         fo1, fo2, fo3, fo4 = st.columns(4)
@@ -730,6 +761,20 @@ def render_pipeline_tab() -> None:
             value=70000,
             step=1000,
             key="cfg_fetch_api_max_datapoints",
+        )
+        systems_config = st.text_area(
+            "Systems (system_id:capacity_kw, comma-separated)",
+            value="615:8,364:8,44:8,162:6,351:6,587:6,228:4",
+            help="Example: 44:8,162:6,228:4. You can also pass JSON list via env if needed.",
+            key="cfg_systems_config",
+        )
+        default_capacity_kw = st.number_input(
+            "Default capacity for unknown SYSTEM_IDS (kW)",
+            min_value=1.0,
+            max_value=30.0,
+            value=6.0,
+            step=0.5,
+            key="cfg_default_capacity_kw",
         )
 
         st.markdown("#### 02 Feature Engineering")
@@ -767,10 +812,14 @@ def render_pipeline_tab() -> None:
         )
 
     custom_options = {
+        "system_ids": system_ids,
+        "train_system_ids": train_system_ids,
         "fetch_mode": fetch_mode,
         "fetch_start": fetch_start,
         "fetch_end": fetch_end,
         "fetch_api_max_datapoints": fetch_api_max_datapoints,
+        "systems_config": systems_config,
+        "default_capacity_kw": default_capacity_kw,
         "fe_standby_threshold_w": fe_standby_threshold_w,
         "fe_base_temp": fe_base_temp,
         "clean_cop_min": clean_cop_min,
@@ -783,17 +832,23 @@ def render_pipeline_tab() -> None:
     c1, c2 = st.columns([1, 1])
     if c1.button("Run Full Pipeline", type="primary", use_container_width=True):
         for stage in pipeline_stages:
-            with st.spinner(f"Running {stage['label']}..."):
-                run = execute_stage(
-                    stage,
-                    timeout_seconds,
-                    train_policy_mode=train_policy_mode,
-                    custom_options=custom_options,
-                )
-                st.session_state["stage_runs"].append(run)
-            if not run["ok"] and stop_on_error:
-                st.error(f"{stage['label']} failed. Full pipeline stopped.")
-                break
+            stage_name = Path(stage.get("path", "")).name.lower()
+            train_modes = [train_policy_mode]
+            if stage_name == "04_train_model.py" and train_policy_mode == "both":
+                train_modes = ["enhanced_onestep", "strict_production"]
+
+            for mode in train_modes:
+                with st.spinner(f"Running {stage['label']} ({mode})..."):
+                    run = execute_stage(
+                        stage,
+                        timeout_seconds,
+                        train_policy_mode=mode,
+                        custom_options=custom_options,
+                    )
+                    st.session_state["stage_runs"].append(run)
+                if not run["ok"] and stop_on_error:
+                    st.error(f"{run['stage_label']} failed. Full pipeline stopped.")
+                    return
 
     if c2.button("Clear Run History", use_container_width=True):
         st.session_state["stage_runs"] = []
@@ -805,14 +860,20 @@ def render_pipeline_tab() -> None:
     for idx, stage in enumerate(pipeline_stages):
         col = stage_cols[idx % col_count]
         if col.button(stage["label"], key=f"run_{stage['id']}", use_container_width=True):
-            with st.spinner(f"Running {stage['label']}..."):
-                run = execute_stage(
-                    stage,
-                    timeout_seconds,
-                    train_policy_mode=train_policy_mode,
-                    custom_options=custom_options,
-                )
-                st.session_state["stage_runs"].append(run)
+            stage_name = Path(stage.get("path", "")).name.lower()
+            train_modes = [train_policy_mode]
+            if stage_name == "04_train_model.py" and train_policy_mode == "both":
+                train_modes = ["enhanced_onestep", "strict_production"]
+
+            for mode in train_modes:
+                with st.spinner(f"Running {stage['label']} ({mode})..."):
+                    run = execute_stage(
+                        stage,
+                        timeout_seconds,
+                        train_policy_mode=mode,
+                        custom_options=custom_options,
+                    )
+                    st.session_state["stage_runs"].append(run)
             st.rerun()
 
     st.markdown("### Execution Log")

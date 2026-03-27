@@ -27,6 +27,30 @@ os.makedirs(PROCESSED_DIR, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 
+def parse_system_id_filter_from_env() -> list[int] | None:
+    """Parse optional system-id filter from SYSTEM_IDS/SYSTEM_ID_FILTER."""
+    raw = os.getenv("SYSTEM_IDS", "").strip()
+    if not raw:
+        raw = os.getenv("SYSTEM_ID_FILTER", "").strip()
+    if not raw:
+        return None
+
+    ids = []
+    seen = set()
+    for token in raw.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        try:
+            sid = int(token)
+        except ValueError:
+            continue
+        if sid not in seen:
+            seen.add(sid)
+            ids.append(sid)
+    return ids if ids else None
+
+
 # Load and merge all per-system raw files into one ordered frame.
 def load_all_systems() -> pd.DataFrame:
     """Load and concatenate all raw system files.
@@ -50,6 +74,17 @@ def load_all_systems() -> pd.DataFrame:
 
     combined = pd.concat(frames, ignore_index=True)
     combined = combined.sort_values(["system_id", "timestamp"]).reset_index(drop=True)
+
+    system_filter = parse_system_id_filter_from_env()
+    if system_filter:
+        combined = combined[combined["system_id"].isin(system_filter)].copy()
+        if combined.empty:
+            raise ValueError(
+                f"No rows found for selected SYSTEM_IDS={system_filter}. "
+                "Check your raw files or remove the filter."
+            )
+        logging.info(f"Applied SYSTEM_IDS filter: {system_filter}")
+
     logging.info(f"âœ… Combined shape: {combined.shape}")
     return combined
 
