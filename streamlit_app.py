@@ -6,7 +6,7 @@ import os
 import re
 import subprocess
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parent
 SRC_DIR = ROOT / "src"
 DATA_DIR = ROOT / "data"
 MODELS_DIR = ROOT / "models"
+SYSTEM_LIST_PUBLIC_URL = "https://heatpumpmonitor.org/system/list/public.json"
 
 
 STAGE_KIND_OVERRIDES = {
@@ -447,12 +448,7 @@ def build_prediction_expert_prompt(summary: dict[str, Any], user_request: str) -
     return (
         "You are a senior data scientist and heat pump performance analyst. "
         "Analyze prediction outputs as an expert and provide practical, technical guidance.\n\n"
-        "Required output format:\n"
-        "1) Executive summary (3-5 bullets)\n"
-        "2) Prediction quality diagnostics\n"
-        "3) Operational interpretation for non-technical stakeholders\n"
-        "4) Risk flags or anomalies\n"
-        "5) Next 5 concrete actions for model/data improvement\n\n"
+        "Answer in 150 words.\n\n"
         f"Prediction summary context:\n{json.dumps(summary, indent=2)}\n\n"
         f"Additional user request:\n{user_request}"
     )
@@ -465,15 +461,113 @@ def read_json(path: Path) -> dict[str, Any]:
 
 def call_gemini(api_key: str, model_name: str, prompt: str) -> str:
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
-    payload = {"contents": [{"parts": [{"text": prompt}]}]}
-    response = requests.post(url, json=payload, timeout=80)
-    response.raise_for_status()
-    data = response.json()
-    candidates = data.get("candidates", [])
-    if not candidates:
+
+    def _extract_error(resp: requests.Response) -> str:
+        try:
+            payload = resp.json()
+            err = payload.get("error", {}) if isinstance(payload, dict) else {}
+            msg = err.get("message")
+            if msg:
+                return str(msg)
+        except Exception:
+            pass
+        return (resp.text or "Unknown Gemini API error")[:500]
+
+    def _looks_incomplete(text: str) -> bool:
+        t = (text or "").strip()
+        if not t:
+            return False
+        # Common cut-off endings from token limits.
+        bad_endings = ("(", "[", "{", ":", ",", "-", "and", "or", "with", "for")
+        if t.endswith(bad_endings):
+            return True
+        # If final character is not terminal punctuation, likely truncated.
+        if t[-1] not in ".!?)]}\"'":
+            return True
+        return False
+
+    def _post_with_optional_fallback(base_prompt: str) -> dict[str, Any]:
+        payload = {
+            "contents": [{"parts": [{"text": base_prompt}]}],
+            "generationConfig": {
+                "temperature": 0.2,
+                "topP": 0.9,
+            },
+        }
+
+        response = requests.post(url, json=payload, timeout=80)
+        if response.status_code == 400:
+            fallback_payload = {"contents": [{"parts": [{"text": base_prompt}]}]}
+            response = requests.post(url, json=fallback_payload, timeout=80)
+
+        if not response.ok:
+            details = _extract_error(response)
+            raise RuntimeError(
+                f"Gemini API request failed ({response.status_code}) for model '{model_name}': {details}"
+            )
+
+        return response.json()
+
+    def _extract_text_and_finish_reason(data: dict[str, Any]) -> tuple[str, str]:
+        candidates = data.get("candidates", [])
+        if not candidates:
+            return "", "NO_CANDIDATE"
+        first = candidates[0] if isinstance(candidates[0], dict) else {}
+        parts = first.get("content", {}).get("parts", [])
+        text = "\n".join(p.get("text", "") for p in parts).strip()
+        finish_reason = str(first.get("finishReason", "UNKNOWN"))
+        return text, finish_reason
+
+    first_data = _post_with_optional_fallback(prompt)
+    text, finish_reason = _extract_text_and_finish_reason(first_data)
+
+    if not text:
         return "Gemini returned no candidates."
-    parts = candidates[0].get("content", {}).get("parts", [])
-    return "\n".join(p.get("text", "") for p in parts).strip() or "Gemini returned an empty response."
+
+    # If output is cut by token limit or ends mid-sentence, request continuation(s).
+    continuation_attempts = 0
+    while continuation_attempts < 2 and (finish_reason == "MAX_TOKENS" or _looks_incomplete(text)):
+        continuation_prompt = (
+            "Continue the previous answer from exactly where it stopped. "
+            "Do not restart and do not repeat. Finish the incomplete sentence first, "
+            "then continue briefly in the same structure.\n\n"
+            "Previous partial answer:\n"
+            f"{text[-1200:]}"
+        )
+        cont_data = _post_with_optional_fallback(continuation_prompt)
+        cont_text, finish_reason = _extract_text_and_finish_reason(cont_data)
+        if cont_text:
+            text = f"{text}\n{cont_text}".strip()
+        continuation_attempts += 1
+
+    return text or "Gemini returned an empty response."
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_public_system_list() -> list[dict[str, Any]]:
+    """Fetch the public HeatPumpMonitor system metadata list."""
+    response = requests.get(SYSTEM_LIST_PUBLIC_URL, timeout=40)
+    response.raise_for_status()
+    payload = response.json()
+
+    if isinstance(payload, list):
+        return payload
+    if isinstance(payload, dict):
+        rows = payload.get("systems")
+        if isinstance(rows, list):
+            return rows
+    raise ValueError("Unexpected metadata payload format from HeatPumpMonitor API.")
+
+
+def find_system_metadata(rows: list[dict[str, Any]], system_id: int) -> dict[str, Any] | None:
+    """Return one system metadata record by integer id."""
+    for row in rows:
+        try:
+            if int(row.get("id")) == int(system_id):
+                return row
+        except Exception:
+            continue
+    return None
 
 
 def load_module(path: Path, module_name: str):
@@ -830,7 +924,7 @@ def render_pipeline_tab() -> None:
     }
 
     c1, c2 = st.columns([1, 1])
-    if c1.button("Run Full Pipeline", type="primary", use_container_width=True):
+    if c1.button("Run Full Pipeline", type="primary", width="stretch"):
         for stage in pipeline_stages:
             stage_name = Path(stage.get("path", "")).name.lower()
             train_modes = [train_policy_mode]
@@ -850,7 +944,7 @@ def render_pipeline_tab() -> None:
                     st.error(f"{run['stage_label']} failed. Full pipeline stopped.")
                     return
 
-    if c2.button("Clear Run History", use_container_width=True):
+    if c2.button("Clear Run History", width="stretch"):
         st.session_state["stage_runs"] = []
         st.rerun()
 
@@ -859,7 +953,7 @@ def render_pipeline_tab() -> None:
     stage_cols = st.columns(col_count)
     for idx, stage in enumerate(pipeline_stages):
         col = stage_cols[idx % col_count]
-        if col.button(stage["label"], key=f"run_{stage['id']}", use_container_width=True):
+        if col.button(stage["label"], key=f"run_{stage['id']}", width="stretch"):
             stage_name = Path(stage.get("path", "")).name.lower()
             train_modes = [train_policy_mode]
             if stage_name == "04_train_model.py" and train_policy_mode == "both":
@@ -984,7 +1078,7 @@ def render_artifacts_tab() -> None:
     if suffix == ".csv":
         df = pd.read_csv(selected)
         st.write(f"Rows: {len(df):,} | Columns: {len(df.columns)}")
-        st.dataframe(df.head(200), use_container_width=True)
+        st.dataframe(df.head(200), width="stretch")
 
         numeric_cols = df.select_dtypes(include="number").columns.tolist()
         if numeric_cols:
@@ -1031,7 +1125,7 @@ def render_model_tab() -> None:
 
     if "strategy_scores" in manifest:
         st.markdown("### Strategy Leaderboard")
-        st.dataframe(pd.DataFrame(manifest["strategy_scores"]), use_container_width=True)
+        st.dataframe(pd.DataFrame(manifest["strategy_scores"]), width="stretch")
 
     gates = manifest.get("gates")
     if gates:
@@ -1042,7 +1136,7 @@ def render_model_tab() -> None:
     if backtest_path.exists():
         st.markdown("### Walk-Forward Folds")
         backtest_df = pd.read_csv(backtest_path)
-        st.dataframe(backtest_df, use_container_width=True)
+        st.dataframe(backtest_df, width="stretch")
 
 
 def render_predict_tab() -> None:
@@ -1094,7 +1188,7 @@ def render_predict_tab() -> None:
 
     input_df = pd.read_csv(uploaded)
     st.write("Input preview")
-    st.dataframe(input_df.head(30), use_container_width=True)
+    st.dataframe(input_df.head(30), width="stretch")
 
     if st.button("Score Batch", type="primary"):
         with st.spinner("Scoring with bundled artifacts..."):
@@ -1109,7 +1203,7 @@ def render_predict_tab() -> None:
             scored.to_csv(output_path, index=False)
 
         st.success(f"Scoring complete. Saved {output_path.relative_to(ROOT)}")
-        st.dataframe(scored.head(60), use_container_width=True)
+        st.dataframe(scored.head(60), width="stretch")
 
         m1, m2, m3 = st.columns(3)
         m1.metric("Rows", f"{len(scored):,}")
@@ -1203,7 +1297,7 @@ def render_single_input_tab() -> None:
     edited_df = st.data_editor(
         editor_df,
         num_rows="fixed",
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         key=f"single_editor_{signature}",
     )
@@ -1222,7 +1316,7 @@ def render_single_input_tab() -> None:
             p3.metric("Pred COP", f"{float(pred_row.get('pred_cop', 0.0)):.3f}")
 
             st.markdown("### Predicted Row")
-            st.dataframe(scored, use_container_width=True)
+            st.dataframe(scored, width="stretch")
         except Exception as exc:
             st.error(f"Single row prediction failed: {exc}")
 
@@ -1285,7 +1379,14 @@ def render_gemini_tab() -> None:
 
         full_prompt = build_prediction_expert_prompt(latest_summary, expert_request)
         with st.spinner("Gemini is analyzing latest prediction output..."):
-            expert_answer = call_gemini(api_key=api_key, model_name=model_name, prompt=full_prompt)
+            try:
+                expert_answer = call_gemini(api_key=api_key, model_name=model_name, prompt=full_prompt)
+            except Exception as exc:
+                st.error(
+                    "Gemini request failed. Try model 'gemini-2.0-flash' or 'gemini-1.5-flash'."
+                )
+                st.caption(str(exc))
+                return
         st.markdown("#### Expert Analysis")
         st.write(expert_answer)
 
@@ -1296,14 +1397,185 @@ def render_gemini_tab() -> None:
 
         full_prompt = (
             "You are a senior ML reliability engineer for heat pump forecasting. "
-            "Be concrete, leakage-safe, and physically grounded.\n\n"
+            "Be concrete, leakage-safe, and physically grounded.\n"
+            "Answer in 150 words.\n\n"
             f"Context:\n{json.dumps(context, indent=2)}\n\n"
             f"User request:\n{prompt}"
         )
         with st.spinner("Querying Gemini..."):
-            answer = call_gemini(api_key=api_key, model_name=model_name, prompt=full_prompt)
+            try:
+                answer = call_gemini(api_key=api_key, model_name=model_name, prompt=full_prompt)
+            except Exception as exc:
+                st.error(
+                    "Gemini request failed. Try model 'gemini-2.0-flash' or 'gemini-1.5-flash'."
+                )
+                st.caption(str(exc))
+                return
         st.markdown("### Response")
         st.write(answer)
+
+
+def render_system_metadata_tab() -> None:
+    st.subheader("System Metadata Lookup")
+    st.caption("Enter a system ID to fetch public metadata from HeatPumpMonitor.")
+
+    c1, c2, c3 = st.columns([2, 1, 1])
+    system_id = c1.number_input("System ID", min_value=1, value=162, step=1)
+    lookup_clicked = c2.button("Lookup", type="primary", width="stretch")
+    refresh_clicked = c3.button("Refresh API Cache", width="stretch")
+
+    if refresh_clicked:
+        fetch_public_system_list.clear()
+        st.success("Metadata cache cleared. Next lookup will fetch fresh data.")
+
+    if not lookup_clicked:
+        st.info("Enter an ID and click Lookup.")
+        return
+
+    with st.spinner("Fetching metadata..."):
+        try:
+            systems = fetch_public_system_list()
+        except Exception as exc:
+            st.error(f"Could not fetch metadata from API: {exc}")
+            return
+
+    record = find_system_metadata(systems, int(system_id))
+    if record is None:
+        st.warning(f"System ID {int(system_id)} was not found in the public metadata list.")
+        st.caption(f"Total systems fetched: {len(systems)}")
+        return
+
+    last_updated_unix = record.get("last_updated")
+    last_updated_text = "Unknown"
+    try:
+        if last_updated_unix is not None:
+            last_updated_text = datetime.fromtimestamp(int(last_updated_unix), UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+    except Exception:
+        last_updated_text = str(last_updated_unix)
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("System ID", int(record.get("id", system_id)))
+    m2.metric("Manufacturer", str(record.get("hp_manufacturer") or "Unknown"))
+    m3.metric("Model", str(record.get("hp_model") or "Unknown"))
+    m4.metric("Output (kW)", str(record.get("hp_output") or "Unknown"))
+
+    def render_kv_section(title: str, data: dict[str, Any]) -> None:
+        st.markdown(f"### {title}")
+        # Streamlit Arrow serialization can fail on mixed object types; render values as text.
+        rows = [{"Field": str(k), "Value": "" if data[k] is None else str(data[k])} for k in data]
+        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+
+    s1, s2 = st.columns(2)
+    with s1:
+        render_kv_section(
+            "Quick Summary",
+            {
+                "last_updated": last_updated_text,
+                "location": record.get("location"),
+                "installer_name": record.get("installer_name"),
+                "installer_url": record.get("installer_url"),
+                "published": record.get("published"),
+            },
+        )
+    with s2:
+        render_kv_section(
+            "Heat Pump",
+            {
+                "hp_manufacturer": record.get("hp_manufacturer"),
+                "hp_model": record.get("hp_model"),
+                "hp_type": record.get("hp_type"),
+                "hp_output": record.get("hp_output"),
+                "hp_max_output": record.get("hp_max_output"),
+                "refrigerant": record.get("refrigerant"),
+            },
+        )
+
+    s3, s4 = st.columns(2)
+    with s3:
+        render_kv_section(
+            "Location and Property",
+            {
+                "property": record.get("property"),
+                "age": record.get("age"),
+                "floor_area": record.get("floor_area"),
+                "heat_loss": record.get("heat_loss"),
+                "design_temp": record.get("design_temp"),
+                "latitude": record.get("latitude"),
+                "longitude": record.get("longitude"),
+            },
+        )
+    with s4:
+        render_kv_section(
+            "Hydraulics and Emitters",
+            {
+                "hydraulic_separation": record.get("hydraulic_separation"),
+                "flow_temp": record.get("flow_temp"),
+                "flow_temp_typical": record.get("flow_temp_typical"),
+                "UFH": record.get("UFH"),
+                "new_radiators": record.get("new_radiators"),
+                "old_radiators": record.get("old_radiators"),
+                "fan_coil_radiators": record.get("fan_coil_radiators"),
+            },
+        )
+
+    s5, s6 = st.columns(2)
+    with s5:
+        render_kv_section(
+            "DHW and Controls",
+            {
+                "dhw_method": record.get("dhw_method"),
+                "dhw_control_type": record.get("dhw_control_type"),
+                "dhw_target_temperature": record.get("dhw_target_temperature"),
+                "cylinder_volume": record.get("cylinder_volume"),
+                "space_heat_control_type": record.get("space_heat_control_type"),
+                "zone_number": record.get("zone_number"),
+            },
+        )
+    with s6:
+        render_kv_section(
+            "Tariff and Solar",
+            {
+                "electricity_tariff": record.get("electricity_tariff"),
+                "electricity_tariff_type": record.get("electricity_tariff_type"),
+                "electricity_tariff_unit_rate_all": record.get("electricity_tariff_unit_rate_all"),
+                "solar_pv_generation": record.get("solar_pv_generation"),
+                "solar_pv_self_consumption": record.get("solar_pv_self_consumption"),
+                "battery_storage_capacity": record.get("battery_storage_capacity"),
+            },
+        )
+
+    s7, s8 = st.columns(2)
+    with s7:
+        render_kv_section(
+            "Metering Boundary",
+            {
+                "electric_meter": record.get("electric_meter"),
+                "heat_meter": record.get("heat_meter"),
+                "metering_inc_controls": record.get("metering_inc_controls"),
+                "metering_inc_central_heating_pumps": record.get("metering_inc_central_heating_pumps"),
+                "metering_inc_secondary_heating_pumps": record.get("metering_inc_secondary_heating_pumps"),
+                "boundary_code": record.get("boundary_code"),
+            },
+        )
+    with s8:
+        render_kv_section(
+            "Data Health",
+            {
+                "data_flag": record.get("data_flag"),
+                "data_flag_note": record.get("data_flag_note"),
+                "heatpump_elec_ago": record.get("heatpump_elec_ago"),
+                "heatpump_heat_ago": record.get("heatpump_heat_ago"),
+                "heatpump_max_age": record.get("heatpump_max_age"),
+            },
+        )
+
+    boundary = record.get("boundary_metering")
+    if isinstance(boundary, dict) and boundary:
+        st.markdown("### Boundary Metering Detail")
+        st.json(boundary)
+
+    st.markdown("### Raw Metadata JSON")
+    st.json(record)
 
 
 def main() -> None:
@@ -1322,8 +1594,8 @@ def main() -> None:
     render_hero()
     render_top_stats()
 
-    tab_pipeline, tab_artifacts, tab_model, tab_predict, tab_single, tab_gemini = st.tabs(
-        ["Pipeline", "Artifacts", "Model Health", "Live Scoring", "Single Input", "Gemini"]
+    tab_pipeline, tab_artifacts, tab_model, tab_predict, tab_single, tab_metadata, tab_gemini = st.tabs(
+        ["Pipeline", "Artifacts", "Model Health", "Live Scoring", "Single Input", "System Metadata", "Gemini"]
     )
 
     with tab_pipeline:
@@ -1336,6 +1608,8 @@ def main() -> None:
         render_predict_tab()
     with tab_single:
         render_single_input_tab()
+    with tab_metadata:
+        render_system_metadata_tab()
     with tab_gemini:
         render_gemini_tab()
 

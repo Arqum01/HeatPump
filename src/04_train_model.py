@@ -1,4 +1,4 @@
-"""Training stage for dual-target heat pump forecasting.
+﻿"""Training stage for dual-target heat pump forecasting.
 
 Strategy stack:
 - Target-specific walk-forward tuning for electricity and heat.
@@ -189,11 +189,11 @@ def load_data() -> tuple[pd.DataFrame, list[str], list[str]]:
         ValueError: If required serving/training columns are missing.
     """
     df = pd.read_csv(INPUT_PATH, parse_dates=["timestamp"])
-    df = df.sort_values(["timestamp", "system_id"]).reset_index(drop=True)
+    df = df.sort_values(["timestamp", "series_id"]).reset_index(drop=True)
 
     selected_systems = parse_train_system_ids()
     if selected_systems:
-        df = df[df["system_id"].isin(selected_systems)].copy()
+        df = df[df["series_id"].isin(selected_systems)].copy()
         if df.empty:
             raise ValueError(
                 f"No rows found for selected training systems: {selected_systems}. "
@@ -204,7 +204,7 @@ def load_data() -> tuple[pd.DataFrame, list[str], list[str]]:
     elec_features, heat_features = build_feature_lists(df)
 
     required = (
-        ["timestamp", "system_id", TARGET_ELEC, TARGET_HEAT, "heating_on"]
+        ["timestamp", "series_id", TARGET_ELEC, TARGET_HEAT, "heating_on"]
         + elec_features
         + heat_features
     )
@@ -220,7 +220,7 @@ def load_data() -> tuple[pd.DataFrame, list[str], list[str]]:
     df = df.dropna(subset=[TARGET_ELEC, TARGET_HEAT]).copy()
 
     print(f"Loaded rows: {before} -> {len(df)} after label checks")
-    print(f"Systems: {sorted(df['system_id'].unique())}")
+    print(f"Systems: {sorted(df['series_id'].unique())}")
     print(f"Date range: {df['timestamp'].min()} -> {df['timestamp'].max()}")
     print(f"Feature policy mode: {FEATURE_POLICY_MODE}")
     print(f"Electricity features: {len(elec_features)}")
@@ -238,10 +238,6 @@ def build_feature_lists(df: pd.DataFrame) -> tuple[list[str], list[str]]:
         tuple[list[str], list[str]]: Ordered electricity and heat feature names.
     """
     meta_cols = []
-    for c in df.columns:
-        if c.startswith("system_") and pd.api.types.is_numeric_dtype(df[c]):
-            meta_cols.append(c)
-    meta_cols = sorted(meta_cols)
 
     if FEATURE_POLICY_MODE == "strict_production":
         elec_features = BASE_COMMON_FEATURES + meta_cols
@@ -308,7 +304,7 @@ def build_feature_schema(
 
     schema = {
         "timestamp_column": "timestamp",
-        "id_column": "system_id",
+        "id_column": "series_id",
         "targets": [TARGET_ELEC, TARGET_HEAT],
         "electricity_features_ordered": elec_features,
         "heat_features_ordered": heat_features,
@@ -718,13 +714,13 @@ def build_slice_calibrators(
         dict: Mapping of ``system|capacity`` keys to multiplier parameters.
     """
     # Learn multiplicative per-slice correction from train-on predictions.
-    calibrated = train_on_df[["system_id", "capacity_kw", TARGET_ELEC, TARGET_HEAT]].copy()
+    calibrated = train_on_df[["series_id", "capacity_kw", TARGET_ELEC, TARGET_HEAT]].copy()
     calibrated["pred_elec"] = np.asarray(pred_elec_on, dtype=float)
     calibrated["pred_heat"] = np.asarray(pred_heat_on, dtype=float)
 
     calibrators = {}
-    for (system_id, capacity_kw), grp in calibrated.groupby(["system_id", "capacity_kw"]):
-        key = f"{int(system_id)}|{int(capacity_kw)}"
+    for (series_id, capacity_kw), grp in calibrated.groupby(["series_id", "capacity_kw"]):
+        key = f"{int(series_id)}|{int(capacity_kw)}"
         pred_e_sum = max(float(grp["pred_elec"].sum()), 1e-6)
         pred_h_sum = max(float(grp["pred_heat"].sum()), 1e-6)
         true_e_sum = float(grp[TARGET_ELEC].sum())
@@ -733,7 +729,7 @@ def build_slice_calibrators(
         elec_mult = np.clip(true_e_sum / pred_e_sum, 0.7, 1.3)
         heat_mult = np.clip(true_h_sum / pred_h_sum, 0.7, 1.3)
         calibrators[key] = {
-            "system_id": int(system_id),
+            "series_id": int(series_id),
             "capacity_kw": int(capacity_kw),
             "elec_mult": float(elec_mult),
             "heat_mult": float(heat_mult),
@@ -751,7 +747,7 @@ def apply_slice_calibrators(
     """Apply per-slice calibration multipliers to predictions.
 
     Args:
-        df: Scored rows containing ``system_id`` and ``capacity_kw``.
+        df: Scored rows containing ``series_id`` and ``capacity_kw``.
         pred_elec_w: Electricity predictions.
         pred_heat_w: Heat predictions.
         calibrators: Slice multiplier mapping.
@@ -763,9 +759,9 @@ def apply_slice_calibrators(
     elec = np.asarray(pred_elec_w, dtype=float).copy()
     heat = np.asarray(pred_heat_w, dtype=float).copy()
 
-    for pos, row in enumerate(df[["system_id", "capacity_kw"]].itertuples(index=False, name=None)):
-        system_id, capacity_kw = row
-        key = f"{int(system_id)}|{int(capacity_kw)}"
+    for pos, row in enumerate(df[["series_id", "capacity_kw"]].itertuples(index=False, name=None)):
+        series_id, capacity_kw = row
+        key = f"{int(series_id)}|{int(capacity_kw)}"
         mult = calibrators.get(key)
         if mult is None:
             continue
@@ -795,17 +791,17 @@ def slice_error_analysis(
         pd.DataFrame: Slice metrics sorted by worst heat/electricity MAE.
     """
     # Quantify residual error concentration across operational slices.
-    scored = df[["system_id", "capacity_kw"]].copy()
+    scored = df[["series_id", "capacity_kw"]].copy()
     scored["true_elec"] = y_elec_true.to_numpy(dtype=float)
     scored["true_heat"] = y_heat_true.to_numpy(dtype=float)
     scored["pred_elec"] = np.asarray(pred_elec_w, dtype=float)
     scored["pred_heat"] = np.asarray(pred_heat_w, dtype=float)
 
     rows = []
-    for (system_id, capacity_kw), grp in scored.groupby(["system_id", "capacity_kw"]):
+    for (series_id, capacity_kw), grp in scored.groupby(["series_id", "capacity_kw"]):
         rows.append(
             {
-                "system_id": int(system_id),
+                "series_id": int(series_id),
                 "capacity_kw": int(capacity_kw),
                 "rows": int(len(grp)),
                 "mae_elec_w": float(mean_absolute_error(grp["true_elec"], grp["pred_elec"])),
@@ -1309,7 +1305,7 @@ def build_report(
         top_slices = slice_metrics_df.head(6)
         for _, s in top_slices.iterrows():
             lines.append(
-                f"- system={int(s['system_id'])} capacity={int(s['capacity_kw'])}kW "
+                f"- system={int(s['series_id'])} capacity={int(s['capacity_kw'])}kW "
                 f"rows={int(s['rows'])} mae_elec={s['mae_elec_w']:.1f}W "
                 f"mae_heat={s['mae_heat_w']:.1f}W r2_elec={s['r2_elec']:.3f} "
                 f"r2_heat={s['r2_heat']:.3f}"
@@ -1436,7 +1432,7 @@ def main():
     slice_calibrators = {}
     if ENABLE_SLICE_CALIBRATION:
         slice_calibrators = build_slice_calibrators(
-            train_df.loc[on_train_mask, ["system_id", "capacity_kw", TARGET_ELEC, TARGET_HEAT]],
+            train_df.loc[on_train_mask, ["series_id", "capacity_kw", TARGET_ELEC, TARGET_HEAT]],
             selected_run["pred_elec_train_on"],
             selected_run["pred_heat_train_on"],
         )
@@ -1587,3 +1583,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

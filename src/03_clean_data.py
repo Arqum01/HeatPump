@@ -1,4 +1,4 @@
-"""Data quality stage for model-ready heat pump observations.
+﻿"""Data quality stage for model-ready heat pump observations.
 
 Concepts:
 - Conservative interpolation for short sensor dropouts.
@@ -18,7 +18,7 @@ REPORT_PATH  = "data/processed/cleaning_report.csv"
 
 # Physics-informed boundaries used for robust outlier filtering.
 RULES = {
-    # Energy — only block physically impossible negatives
+    # Energy â€” only block physically impossible negatives
     # Zero is allowed; negative power is physically implausible.
     "heatpump_elec_min":  0,
     "heatpump_heat_min":  0,
@@ -64,7 +64,7 @@ def smart_interpolate(df: pd.DataFrame) -> pd.DataFrame:
     before = df[INTERP_COLS].isna().sum().sum()
 
     df[INTERP_COLS] = (
-        df.groupby("system_id")[INTERP_COLS]
+        df.groupby("series_id")[INTERP_COLS]
         .transform(lambda x: x.interpolate(method="linear", limit=1))
     )
 
@@ -140,12 +140,12 @@ def generate_report(df_before: pd.DataFrame, df_after: pd.DataFrame) -> pd.DataF
         pd.DataFrame: Per-system report also saved to ``REPORT_PATH``.
     """
     rows = []
-    for sid in df_before["system_id"].unique():
-        b = df_before[df_before["system_id"] == sid]
-        a = df_after[df_after["system_id"] == sid]
+    for sid in df_before["series_id"].unique():
+        b = df_before[df_before["series_id"] == sid]
+        a = df_after[df_after["series_id"] == sid]
         kept_pct = len(a) / len(b) * 100 if len(b) > 0 else 0
         rows.append({
-            "system_id":      sid,
+            "series_id":      sid,
             "capacity_kw":    b["capacity_kw"].iloc[0],
             "rows_before":    len(b),
             "rows_after":     len(a),
@@ -178,8 +178,8 @@ def main():
     report = generate_report(df_before, df)
 
     total_pct = len(df) / len(df_before) * 100
-    logging.info(f"\n✅ Clean dataset saved → {OUTPUT_PATH}")
-    logging.info(f"   {len(df_before)} rows → {len(df)} rows ({total_pct:.1f}% retained)")
+    logging.info(f"\nâœ… Clean dataset saved â†’ {OUTPUT_PATH}")
+    logging.info(f"   {len(df_before)} rows â†’ {len(df)} rows ({total_pct:.1f}% retained)")
 
     print("\n--- Cleaning Report by System ---")
     print(report.to_string(index=False))
@@ -188,9 +188,10 @@ def main():
     print(df["cop"].describe().round(3))
 
     print("\n--- System 228 Check ---")
-    s228 = df[df["system_id"] == 228][["timestamp", "heatpump_elec", "heatpump_heat", "heatpump_roomT"]].head(5)
+    s228 = df[df["series_id"] == 228][["timestamp", "heatpump_elec", "heatpump_heat", "heatpump_roomT"]].head(5)
     print(s228.to_string(index=False))
 
 
 if __name__ == "__main__":
     main()
+

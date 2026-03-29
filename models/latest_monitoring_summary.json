@@ -1,31 +1,31 @@
 {
-  "generated_at": "2026-03-27T15:19:17.099763",
+  "generated_at": "2026-03-29T20:29:12.047465",
   "input_rows": 100,
   "prediction_rows": 100,
   "successful_prediction_rate": 1.0,
   "top_null_rate_features": {
     "heatpump_roomT": 1.0,
-    "temp_deficit": 1.0,
     "load_ratio": 1.0,
-    "elec_lag168": 1.0,
+    "temp_deficit": 1.0,
     "heat_lag168": 1.0,
-    "cop": 0.51,
-    "cop_lag1": 0.51,
-    "elec_lag24": 0.23,
-    "heat_lag24": 0.22,
-    "elec_lag6": 0.05
+    "elec_lag168": 1.0,
+    "cop_lag1": 0.49,
+    "cop": 0.48,
+    "elec_lag24": 0.24,
+    "heat_lag24": 0.23,
+    "elec_lag6": 0.06
   },
   "prediction_ranges": {
     "pred_heatpump_elec_min": 50.0,
-    "pred_heatpump_elec_max": 1247.9119695384538,
+    "pred_heatpump_elec_max": 973.5050130237285,
     "pred_heatpump_heat_min": 0.0,
-    "pred_heatpump_heat_max": 4312.92983359215,
+    "pred_heatpump_heat_max": 2800.0421513118945,
     "pred_cop_min": 0.0,
-    "pred_cop_max": 5.320280219237826
+    "pred_cop_max": 6.460972874563907
   },
   "runtime_classifier": {
-    "predicted_on_rate": 0.49,
-    "predicted_off_rate": 0.51
+    "predicted_on_rate": 0.52,
+    "predicted_off_rate": 0.48
   },
   "guardrail_counts": {
     "cop_guardrail_adjusted_count": 0
@@ -33,14 +33,14 @@
   "alerts": [],
   "feature_mean_shift_zscore": {
     "heatpump_roomT": NaN,
+    "system_id": 1.147765727665068,
+    "capacity_kw": 1.1043489778032112,
     "temp_deficit": NaN,
     "load_ratio": NaN,
-    "elec_lag168": NaN,
-    "heat_lag168": NaN,
-    "system_44": 1.1665961549272943,
-    "system_162": 1.1665961549272943,
-    "system_id": 1.1665961549272938,
-    "capacity_kw": 1.1665961549272936,
-    "month_sin": 1.091997580095935
+    "month_sin": 1.1734790138869713,
+    "month": 0.7376273945856352,
+    "month_cos": 0.7055603951853741,
+    "heatpump_flowrate": 0.5084040758399204,
+    "flowrate_lag1": 0.4994982810600923
   }
 }

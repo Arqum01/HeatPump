@@ -1,4 +1,4 @@
-"""Data ingestion stage for the heat pump pipeline.
+﻿"""Data ingestion stage for the heat pump pipeline.
 
 Concepts:
 - Asynchronous collection across multiple systems.
@@ -18,13 +18,13 @@ import pandas as pd
 
 # Systems and metadata used throughout the pipeline.
 DEFAULT_SYSTEMS = [
-    {"system_id": 615, "capacity_kw": 8},
-    {"system_id": 364, "capacity_kw": 8},
-    {"system_id": 44, "capacity_kw": 8},
-    {"system_id": 162, "capacity_kw": 6},
-    {"system_id": 351, "capacity_kw": 6},
-    {"system_id": 587, "capacity_kw": 6},
-    {"system_id": 228, "capacity_kw": 4},
+    {"series_id": 615, "capacity_kw": 8},
+    {"series_id": 364, "capacity_kw": 8},
+    {"series_id": 44, "capacity_kw": 8},
+    {"series_id": 162, "capacity_kw": 6},
+    {"series_id": 351, "capacity_kw": 6},
+    {"series_id": 587, "capacity_kw": 6},
+    {"series_id": 228, "capacity_kw": 4},
 ]
 
 
@@ -65,7 +65,7 @@ def parse_systems_from_env() -> list[dict]:
     """Parse optional custom systems from environment variable.
 
     Supported formats in SYSTEMS_CONFIG:
-    - JSON list: [{"system_id": 44, "capacity_kw": 8}, ...]
+    - JSON list: [{"series_id": 44, "capacity_kw": 8}, ...]
     - CSV-like: 44:8,162:6,228:4
     """
     raw = os.getenv("SYSTEMS_CONFIG", "").strip()
@@ -75,13 +75,13 @@ def parse_systems_from_env() -> list[dict]:
         if not id_filter:
             return DEFAULT_SYSTEMS
 
-        by_id = {item["system_id"]: item for item in DEFAULT_SYSTEMS}
+        by_id = {item["series_id"]: item for item in DEFAULT_SYSTEMS}
         selected = []
         for sid in id_filter:
             if sid in by_id:
                 selected.append(by_id[sid])
             else:
-                selected.append({"system_id": sid, "capacity_kw": default_capacity_kw})
+                selected.append({"series_id": sid, "capacity_kw": default_capacity_kw})
         return selected
 
     try:
@@ -91,14 +91,14 @@ def parse_systems_from_env() -> list[dict]:
             for item in parsed_json:
                 if not isinstance(item, dict):
                     continue
-                sid = int(item["system_id"])
+                sid = int(item["series_id"])
                 cap = float(item["capacity_kw"])
-                systems.append({"system_id": sid, "capacity_kw": cap})
+                systems.append({"series_id": sid, "capacity_kw": cap})
             if systems:
                 if not id_filter:
                     return systems
                 allowed = set(id_filter)
-                filtered = [s for s in systems if s["system_id"] in allowed]
+                filtered = [s for s in systems if s["series_id"] in allowed]
                 return filtered if filtered else systems
     except Exception:
         pass
@@ -114,7 +114,7 @@ def parse_systems_from_env() -> list[dict]:
         try:
             sid = int(sid_str.strip())
             cap = float(cap_str.strip())
-            systems.append({"system_id": sid, "capacity_kw": cap})
+            systems.append({"series_id": sid, "capacity_kw": cap})
         except ValueError:
             continue
 
@@ -122,20 +122,20 @@ def parse_systems_from_env() -> list[dict]:
         if not id_filter:
             return systems
         allowed = set(id_filter)
-        filtered = [s for s in systems if s["system_id"] in allowed]
+        filtered = [s for s in systems if s["series_id"] in allowed]
         return filtered if filtered else systems
 
     default_capacity_kw = float(os.getenv("DEFAULT_CAPACITY_KW", "6"))
     if not id_filter:
         return DEFAULT_SYSTEMS
 
-    by_id = {item["system_id"]: item for item in DEFAULT_SYSTEMS}
+    by_id = {item["series_id"]: item for item in DEFAULT_SYSTEMS}
     selected = []
     for sid in id_filter:
         if sid in by_id:
             selected.append(by_id[sid])
         else:
-            selected.append({"system_id": sid, "capacity_kw": default_capacity_kw})
+            selected.append({"series_id": sid, "capacity_kw": default_capacity_kw})
     return selected
 
 
@@ -246,12 +246,12 @@ async def fetch_system(client: httpx.AsyncClient, system: dict):
 
     Args:
         client: Shared async HTTP client.
-        system: System metadata dictionary containing at least ``system_id``.
+        system: System metadata dictionary containing at least ``series_id``.
 
     Returns:
-        tuple: ``(system_id, system_meta, raw_json_or_none, effective_start, error_or_none)``.
+        tuple: ``(series_id, system_meta, raw_json_or_none, effective_start, error_or_none)``.
     """
-    sid = system["system_id"]
+    sid = system["series_id"]
     params = {
         "id": sid,
         "feeds": ",".join(FEEDS),
@@ -320,7 +320,7 @@ def build_dataframe(system: dict, raw_json: dict, data_start: str) -> pd.DataFra
     Returns:
         pd.DataFrame: Hourly UTC-indexed frame with aligned feeds and metadata.
     """
-    sid = system["system_id"]
+    sid = system["series_id"]
     start_dt = datetime.strptime(data_start, "%d-%m-%Y")
     end_dt = datetime.strptime(RESOLVED_END, "%d-%m-%Y")
     time_index = pd.date_range(
@@ -344,7 +344,7 @@ def build_dataframe(system: dict, raw_json: dict, data_start: str) -> pd.DataFra
     df.index.name = "timestamp"
     df = df.reset_index()
 
-    df["system_id"] = sid
+    df["series_id"] = sid
     df["capacity_kw"] = system["capacity_kw"]
     if FETCH_MODE == "max_available":
         has_signal = df[["heatpump_elec", "heatpump_heat"]].notna().any(axis=1)
@@ -393,7 +393,7 @@ async def main():
 
             quality_rows.append(
                 {
-                    "system_id": sid,
+                    "series_id": sid,
                     "capacity_kw": system["capacity_kw"],
                     "rows": len(df),
                     **feed_missing_pct,
@@ -403,7 +403,7 @@ async def main():
 
             fetch_log.append(
                 {
-                    "system_id": sid,
+                    "series_id": sid,
                     "capacity_kw": system["capacity_kw"],
                     "rows": len(df),
                     "missing_elec_pct": missing_elec_pct,
@@ -415,7 +415,7 @@ async def main():
         else:
             quality_rows.append(
                 {
-                    "system_id": sid,
+                    "series_id": sid,
                     "capacity_kw": system["capacity_kw"],
                     "rows": 0,
                     **{f"missing_{feed}_pct": 100.0 for feed in FEEDS},
@@ -425,7 +425,7 @@ async def main():
 
             fetch_log.append(
                 {
-                    "system_id": sid,
+                    "series_id": sid,
                     "capacity_kw": system["capacity_kw"],
                     "rows": 0,
                     "missing_elec_pct": 100,
@@ -449,3 +449,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+

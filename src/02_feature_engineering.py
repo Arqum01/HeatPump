@@ -56,7 +56,7 @@ def load_all_systems() -> pd.DataFrame:
     """Load and concatenate all raw system files.
 
     Returns:
-        pd.DataFrame: Combined dataset sorted by ``system_id`` and ``timestamp``.
+        pd.DataFrame: Combined dataset sorted by ``series_id`` and ``timestamp``.
 
     Raises:
         FileNotFoundError: If no raw system files are found in ``RAW_DIR``.
@@ -73,11 +73,11 @@ def load_all_systems() -> pd.DataFrame:
         logging.info(f"Loaded {f} â†’ {df.shape[0]} rows")
 
     combined = pd.concat(frames, ignore_index=True)
-    combined = combined.sort_values(["system_id", "timestamp"]).reset_index(drop=True)
+    combined = combined.sort_values(["series_id", "timestamp"]).reset_index(drop=True)
 
     system_filter = parse_system_id_filter_from_env()
     if system_filter:
-        combined = combined[combined["system_id"].isin(system_filter)].copy()
+        combined = combined[combined["series_id"].isin(system_filter)].copy()
         if combined.empty:
             raise ValueError(
                 f"No rows found for selected SYSTEM_IDS={system_filter}. "
@@ -216,7 +216,7 @@ def add_lag_features(df: pd.DataFrame) -> pd.DataFrame:
         "heating_on":        "heating_on_lag1",
     }
     for source_col, lag_col in lag_cols.items():
-        df[lag_col] = df.groupby("system_id")[source_col].shift(1)
+        df[lag_col] = df.groupby("series_id")[source_col].shift(1)
 
     logging.info("Lag-1 features created.")
     return df
@@ -232,7 +232,7 @@ def add_extended_lag_features(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         pd.DataFrame: DataFrame with daily/weekly lags, run blocks, and COP memory.
     """
-    g = df.groupby("system_id")
+    g = df.groupby("series_id")
 
     # Daily and weekly lags capture repeating load structure.
     df["elec_lag24"]       = g["heatpump_elec"].shift(24)    # Same hour yesterday
@@ -277,17 +277,20 @@ def add_extended_lag_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def add_metadata_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Expand system identity into model-ready indicator columns.
+    """Remove unused metadata columns from the feature table.
 
     Args:
-        df: DataFrame with system identity columns.
+        df: Input DataFrame.
 
     Returns:
-        pd.DataFrame: DataFrame with one-hot encoded system slices.
+        pd.DataFrame: DataFrame without deprecated metadata columns.
     """
-    system_dummies = pd.get_dummies(df["system_id"], prefix="system", dtype=float)
+    drop_cols = ["hp_model", "hp_type", "refrigerant"]
+    existing = [c for c in drop_cols if c in df.columns]
+    if existing:
+        df = df.drop(columns=existing)
+        logging.info(f"Dropped unused metadata columns: {existing}")
 
-    df = pd.concat([df, system_dummies], axis=1)
     return df
 
 
@@ -302,7 +305,7 @@ def add_rolling_features(df: pd.DataFrame) -> pd.DataFrame:
         pd.DataFrame: DataFrame with rolling outdoor temperature averages.
     """
     df["outsideT_3h_avg"] = (
-        df.groupby("system_id")["heatpump_outsideT"]
+        df.groupby("series_id")["heatpump_outsideT"]
         .transform(lambda x: x.rolling(window=3, min_periods=1).mean())
     )
     return df
@@ -338,7 +341,7 @@ def main():
 
     # Quick verification view for debugging and QA.
     print("\n--- Feature Verification (System 615, rows 1â€“4) ---")
-    sample = df[df["system_id"] == 615].iloc[1:5]
+    sample = df[df["series_id"] == 615].iloc[1:5]
     print(sample[[
         "timestamp",
         "heatpump_elec", "elec_lag1", "elec_lag24",
@@ -356,3 +359,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

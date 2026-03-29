@@ -1,4 +1,4 @@
-"""Walk-forward validation for dual-target heat pump models.
+﻿"""Walk-forward validation for dual-target heat pump models.
 
 Concepts:
 - Rolling-origin evaluation for realistic temporal generalization.
@@ -178,11 +178,11 @@ def load_data():
         ValueError: If any required columns are missing.
     """
     df = pd.read_csv(INPUT_PATH, parse_dates=["timestamp"])
-    df = df.sort_values(["timestamp", "system_id"]).reset_index(drop=True)
+    df = df.sort_values(["timestamp", "series_id"]).reset_index(drop=True)
     elec_features, heat_features = build_feature_lists(df)
 
     required = (
-        ["timestamp", "system_id", TARGET_ELEC, TARGET_HEAT, "heating_on", "capacity_kw"]
+        ["timestamp", "series_id", TARGET_ELEC, TARGET_HEAT, "heating_on", "capacity_kw"]
         + elec_features
         + heat_features
     )
@@ -361,10 +361,10 @@ def slice_metrics(test_df, pred_elec_w, pred_heat_w):
             "mae_heat_w": float(mean_absolute_error(g[TARGET_HEAT], g["pred_heatpump_heat"])),
         })
 
-    for system_id, g in temp.groupby("system_id"):
+    for series_id, g in temp.groupby("series_id"):
         out.append({
-            "slice_type": "system_id",
-            "slice_value": str(system_id),
+            "slice_type": "series_id",
+            "slice_value": str(series_id),
             "rows": int(len(g)),
             "r2_elec": float(r2_score(g[TARGET_ELEC], g["pred_heatpump_elec"])) if len(g) > 1 else np.nan,
             "r2_heat": float(r2_score(g[TARGET_HEAT], g["pred_heatpump_heat"])) if len(g) > 1 else np.nan,
@@ -525,3 +525,4 @@ def run_backtest():
 
 if __name__ == "__main__":
     run_backtest()
+

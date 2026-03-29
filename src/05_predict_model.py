@@ -1,4 +1,4 @@
-"""Serving stage for dual-target heat pump forecasting.
+﻿"""Serving stage for dual-target heat pump forecasting.
 
 Concepts:
 - Schema-first validation to keep train/serve parity.
@@ -197,7 +197,7 @@ def apply_slice_calibrators(df: pd.DataFrame, pred_elec: np.ndarray, pred_heat: 
     """Apply optional per-slice multipliers to serving predictions.
 
     Args:
-        df: Scored DataFrame with ``system_id`` and ``capacity_kw`` columns.
+        df: Scored DataFrame with ``series_id`` and ``capacity_kw`` columns.
         pred_elec: Electricity predictions.
         pred_heat: Heat predictions.
         calibrators: Mapping of ``system|capacity`` keys to multipliers.
@@ -209,12 +209,17 @@ def apply_slice_calibrators(df: pd.DataFrame, pred_elec: np.ndarray, pred_heat: 
     if not calibrators:
         return pred_elec, pred_heat
 
+    # Single-row/manual serving can provide only required model features,
+    # which may omit slice identifiers used by calibrators.
+    if "series_id" not in df.columns or "capacity_kw" not in df.columns:
+        return pred_elec, pred_heat
+
     elec = pred_elec.astype(float).copy()
     heat = pred_heat.astype(float).copy()
 
-    for pos, row in enumerate(df[["system_id", "capacity_kw"]].itertuples(index=False, name=None)):
-        system_id, capacity_kw = row
-        key = f"{int(system_id)}|{int(capacity_kw)}"
+    for pos, row in enumerate(df[["series_id", "capacity_kw"]].itertuples(index=False, name=None)):
+        series_id, capacity_kw = row
+        key = f"{int(series_id)}|{int(capacity_kw)}"
         mult = calibrators.get(key)
         if mult is None:
             continue
@@ -320,4 +325,5 @@ if __name__ == "__main__":
 
     print(preds.head())
     print(json.dumps(monitoring, indent=2))
+
 
