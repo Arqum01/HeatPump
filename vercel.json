@@ -1,5 +1,39 @@
 {
   "version": 2,
+  "functions": {
+    "api/index.py": {
+      "runtime": "python3.12",
+      "memory": 1024,
+      "maxDuration": 30,
+      "includeFiles": [
+        "models/production/**",
+        "src/05_predict_model.py",
+        "src/monitoring_model_06.py"
+      ],
+      "excludeFiles": [
+        ".venv/**",
+        ".git/**",
+        ".github/**",
+        "data/**",
+        "docs/**",
+        "documentation/**",
+        "models/*.json",
+        "models/*.joblib",
+        "models/*.txt",
+        "models/*.csv",
+        "models/*.md",
+        "src/01_fetch_data.py",
+        "src/02_feature_engineering.py",
+        "src/03_clean_data.py",
+        "src/04_train_model.py",
+        "src/backtest_model_07.py",
+        "streamlit_app.py",
+        "customer_app.py",
+        "*.md",
+        "uv.lock"
+      ]
+    }
+  },
   "builds": [
     {
       "src": "api/index.py",
