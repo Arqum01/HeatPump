@@ -1,7 +1,7 @@
 # Heat Pump Monitor Source Code Guide
 
 ## Purpose
-This document explains every Python source file and every function in the pipeline.
+This document explains core Python source files and key functions across the training pipeline and Streamlit apps.
 It is designed for fast onboarding, safe edits, and easier debugging.
 
 ## Project Flow
@@ -12,6 +12,8 @@ It is designed for fast onboarding, safe edits, and easier debugging.
 5. `05_predict_model.py`: Load artifacts and run batch inference.
 6. `monitoring_model_06.py`: Build monitoring summaries from prediction runs.
 7. `backtest_model_07.py`: Run walk-forward backtesting and slice diagnostics.
+8. `streamlit_app.py`: Admin/ops console for running the pipeline and analyzing outputs.
+9. `customer_app.py`: Customer-facing estimator with guided inputs and AI briefing.
 
 ---
 
@@ -335,9 +337,54 @@ Runs walk-forward backtesting and slice diagnostics to estimate temporal general
 
 ---
 
+## `streamlit_app.py`
+### Module Role
+Admin and operations console for end-to-end model lifecycle activities.
+
+### Key Responsibilities
+- Discover and execute numbered pipeline stages.
+- Provide custom runtime overrides via environment variables.
+- Expose artifact browsing for CSV/JSON/text outputs.
+- Provide Model Health, Live Scoring, Single Input, System Metadata, and Gemini tabs.
+- Allow run-tag selection by feature policy in scoring and diagnostics areas.
+
+### High-Impact Functions
+- `discover_pipeline_stages()`: Finds runnable stages dynamically from src.
+- `execute_stage(...)`: Applies per-stage env overrides and executes scripts.
+- `render_pipeline_tab()`: Main automation workflow and log viewer.
+- `render_model_tab()`: Run-selectable model diagnostics.
+- `render_predict_tab()` and `render_single_input_tab()`: Batch and single-row inference.
+- `render_system_metadata_tab()`: Public metadata lookup by system ID.
+- `render_gemini_tab()`: Model-context-aware Gemini analysis.
+
+---
+
+## `customer_app.py`
+### Module Role
+Customer-facing interface for quick home-level estimates and plain-language AI guidance.
+
+### Key Responsibilities
+- Collect simplified inputs and derive full model-serving feature row.
+- Execute predictions using the latest run manifest silently.
+- Present customer-friendly cost and efficiency outputs.
+- Offer AI Briefing with preset topics and a custom request path.
+- Keep power-user tools behind staff access controls.
+
+### High-Impact Functions
+- `render_instant_estimate_tab(...)`: Main customer form and predict action.
+- `build_single_row(...)`: Converts user input into full serving schema row.
+- `render_single_prediction_result(...)`: Friendly results and technical details.
+- `render_gemini_tab(...)`: AI Briefing with broad options + custom user question.
+- `render_settings_bar(...)`: Appearance, currency, and unit-rate controls.
+- `main()`: App orchestration and staff-gated feature exposure.
+
+---
+
 ## Recommended Reading Order
 1. Start with `01_fetch_data.py` to understand ingestion contracts.
 2. Move to `02_feature_engineering.py` and `03_clean_data.py` for dataset construction.
 3. Read `04_train_model.py` for core modeling logic.
 4. Read `05_predict_model.py` for serving parity.
 5. Use `monitoring_model_06.py` and `backtest_model_07.py` for operational and validation context.
+6. Read `streamlit_app.py` for admin/ops execution workflow.
+7. Read `customer_app.py` with docs/CUSTOMER_APP_DETAILED_DOCUMENTATION.md for customer journey details.

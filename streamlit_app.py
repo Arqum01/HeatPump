@@ -412,6 +412,57 @@ def list_manifest_runs() -> list[dict[str, str]]:
     return rows
 
 
+def select_manifest_run(
+    key_prefix: str,
+    run_label: str = "Model run",
+) -> tuple[dict[str, str] | None, dict[str, Any] | None]:
+    """Render a run selector so users can choose policy/run instead of always latest."""
+    manifests = list_manifest_runs()
+    if not manifests:
+        st.warning("No run manifests available yet. Run training stage first.")
+        return None, None
+
+    policy_mode = st.radio(
+        "Feature policy",
+        ["enhanced_onestep", "strict_production", "all"],
+        horizontal=True,
+        key=f"{key_prefix}_policy_mode",
+    )
+
+    filtered_manifests = manifests
+    if policy_mode != "all":
+        filtered_manifests = [m for m in manifests if m.get("policy") == policy_mode]
+
+    if not filtered_manifests:
+        st.warning("No runs found for this policy.")
+        return None, None
+
+    run_tag = st.selectbox(
+        run_label,
+        options=[m["run_tag"] for m in filtered_manifests],
+        format_func=lambda t: next(
+            (
+                f"{m['run_tag']} | {m['policy']} | {m['strategy']}"
+                for m in filtered_manifests
+                if m["run_tag"] == t
+            ),
+            t,
+        ),
+        key=f"{key_prefix}_run_tag",
+    )
+
+    selected_run = next((m for m in filtered_manifests if m["run_tag"] == run_tag), filtered_manifests[0])
+
+    manifest_path = MODELS_DIR / f"run_manifest_{selected_run['run_tag']}.json"
+    try:
+        selected_manifest = read_json(manifest_path)
+    except Exception as exc:
+        st.error(f"Could not load manifest for run '{selected_run['run_tag']}': {exc}")
+        return selected_run, None
+
+    return selected_run, selected_manifest
+
+
 def summarize_prediction_df(df: pd.DataFrame) -> dict[str, Any]:
     summary: dict[str, Any] = {
         "rows": int(len(df)),
@@ -577,6 +628,83 @@ def load_module(path: Path, module_name: str):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _sanitize_default_systems(raw_systems: Any) -> list[dict[str, float]]:
+    systems: list[dict[str, float]] = []
+    seen: set[int] = set()
+    fallback_capacity = float(os.getenv("DEFAULT_CAPACITY_KW", "6"))
+
+    if not isinstance(raw_systems, list):
+        return systems
+
+    for item in raw_systems:
+        if not isinstance(item, dict):
+            continue
+        try:
+            sid = int(item.get("series_id"))
+        except Exception:
+            continue
+        if sid in seen:
+            continue
+        seen.add(sid)
+
+        try:
+            capacity_kw = float(item.get("capacity_kw"))
+        except Exception:
+            capacity_kw = fallback_capacity
+
+        systems.append({"series_id": sid, "capacity_kw": capacity_kw})
+
+    return systems
+
+
+def _format_capacity_kw(capacity_kw: float) -> str:
+    if float(capacity_kw).is_integer():
+        return str(int(capacity_kw))
+    return str(capacity_kw)
+
+
+def _fetch_defaults_source_mtime() -> float:
+    source_path = SRC_DIR / "01_fetch_data.py"
+    if not source_path.exists():
+        return -1.0
+    return source_path.stat().st_mtime
+
+
+@st.cache_data(show_spinner=False)
+def load_fetch_stage_default_systems(source_mtime: float) -> list[dict[str, float]]:
+    _ = source_mtime
+    try:
+        fetch_module = load_module(SRC_DIR / "01_fetch_data.py", "fetch_defaults_streamlit")
+        return _sanitize_default_systems(getattr(fetch_module, "DEFAULT_SYSTEMS", []))
+    except Exception:
+        return []
+
+
+def get_default_system_context() -> dict[str, Any]:
+    defaults = load_fetch_stage_default_systems(_fetch_defaults_source_mtime())
+
+    system_ids_csv = ",".join(str(item["series_id"]) for item in defaults)
+    systems_config_csv = ",".join(
+        f"{item['series_id']}:{_format_capacity_kw(item['capacity_kw'])}"
+        for item in defaults
+    )
+
+    train_subset = defaults[:2]
+    train_system_ids_csv = ",".join(str(item["series_id"]) for item in train_subset)
+
+    signature = json.dumps(defaults, sort_keys=True)
+    default_system_id = int(defaults[0]["series_id"]) if defaults else 1
+
+    return {
+        "defaults": defaults,
+        "signature": signature,
+        "system_ids_csv": system_ids_csv,
+        "train_system_ids_csv": train_system_ids_csv,
+        "systems_config_csv": systems_config_csv,
+        "default_system_id": default_system_id,
+    }
 
 
 def run_python_script(
@@ -816,6 +944,11 @@ def render_pipeline_tab() -> None:
         st.error("No pipeline stages discovered in src/. Add numbered scripts like 01_*.py.")
         return
 
+    defaults_ctx = get_default_system_context()
+    if st.session_state.get("cfg_default_systems_signature") != defaults_ctx["signature"]:
+        st.session_state["cfg_systems_config"] = defaults_ctx["systems_config_csv"]
+        st.session_state["cfg_default_systems_signature"] = defaults_ctx["signature"]
+
     timeout_seconds = st.slider("Stage timeout (seconds)", min_value=120, max_value=7200, value=1800, step=60)
     stop_on_error = st.checkbox("Stop full pipeline on first error", value=True)
     train_policy_mode = st.radio(
@@ -833,13 +966,19 @@ def render_pipeline_tab() -> None:
         system_ids = ss1.text_input(
             "SYSTEM_IDS (optional)",
             value="",
-            help="Comma-separated IDs used by fetch + feature engineering + training. Example: 615,44,228",
+            help=(
+                "Comma-separated IDs used by fetch + feature engineering + training. "
+                f"Current defaults: {defaults_ctx['system_ids_csv'] or 'none found'}"
+            ),
             key="cfg_system_ids",
         )
         train_system_ids = ss2.text_input(
             "TRAIN_SYSTEM_IDS (optional)",
             value="",
-            help="Optional training-only subset. Example: 615,44",
+            help=(
+                "Optional training-only subset. "
+                f"Suggested from defaults: {defaults_ctx['train_system_ids_csv'] or 'set manually'}"
+            ),
             key="cfg_train_system_ids",
         )
 
@@ -858,8 +997,11 @@ def render_pipeline_tab() -> None:
         )
         systems_config = st.text_area(
             "Systems (system_id:capacity_kw, comma-separated)",
-            value="615:8,364:8,44:8,162:6,351:6,587:6,228:4",
-            help="Example: 44:8,162:6,228:4. You can also pass JSON list via env if needed.",
+            value=defaults_ctx["systems_config_csv"],
+            help=(
+                "Auto-loaded from src/01_fetch_data.py DEFAULT_SYSTEMS. "
+                "You can also pass a JSON list via env if needed."
+            ),
             key="cfg_systems_config",
         )
         default_capacity_kw = st.number_input(
@@ -1104,12 +1246,18 @@ def render_artifacts_tab() -> None:
 
 def render_model_tab() -> None:
     st.subheader("Model Health")
-    manifest_path = latest_file(MODELS_DIR, "run_manifest_*.json")
-    if not manifest_path:
-        st.warning("No model manifest found. Run training stage first.")
+    st.caption("Choose which model bundle to inspect (enhanced or strict production).")
+
+    selected_run, manifest = select_manifest_run(
+        key_prefix="model_health",
+        run_label="Model run",
+    )
+    if not selected_run or not manifest:
         return
 
-    manifest = read_json(manifest_path)
+    st.caption(
+        f"Loaded run: {selected_run['run_tag']} | {selected_run['policy']} | {selected_run['strategy']}"
+    )
     metrics = manifest.get("metrics", {})
 
     row1 = st.columns(4)
@@ -1325,6 +1473,15 @@ def render_gemini_tab() -> None:
     st.subheader("Gemini Analyst")
     st.caption("The app auto-loads GEMINI_API_KEY from your .env file if present.")
 
+    selected_run, selected_manifest = select_manifest_run(
+        key_prefix="gemini_context",
+        run_label="Model context run",
+    )
+    if selected_run:
+        st.caption(
+            f"Gemini context run: {selected_run['run_tag']} | {selected_run['policy']} | {selected_run['strategy']}"
+        )
+
     default_key = os.getenv("GEMINI_API_KEY", "")
     api_key = st.text_input("Gemini API Key", type="password", value=default_key)
     model_name = st.selectbox(
@@ -1332,10 +1489,10 @@ def render_gemini_tab() -> None:
         ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"],
     )
 
-    manifest = latest_file(MODELS_DIR, "run_manifest_*.json")
     monitoring = MODELS_DIR / "latest_monitoring_summary.json"
     context = {
-        "manifest": read_json(manifest) if manifest else {},
+        "selected_run": selected_run or {},
+        "manifest": selected_manifest or {},
         "monitoring": read_json(monitoring) if monitoring.exists() else {},
     }
 
@@ -1419,8 +1576,9 @@ def render_system_metadata_tab() -> None:
     st.subheader("System Metadata Lookup")
     st.caption("Enter a system ID to fetch public metadata from HeatPumpMonitor.")
 
+    default_system_id = get_default_system_context()["default_system_id"]
     c1, c2, c3 = st.columns([2, 1, 1])
-    system_id = c1.number_input("System ID", min_value=1, value=162, step=1)
+    system_id = c1.number_input("System ID", min_value=1, value=default_system_id, step=1)
     lookup_clicked = c2.button("Lookup", type="primary", width="stretch")
     refresh_clicked = c3.button("Refresh API Cache", width="stretch")
 

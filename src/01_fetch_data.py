@@ -17,14 +17,21 @@ import pandas as pd
 
 
 # Systems and metadata used throughout the pipeline.
+# Systems and metadata updated for optimal 2-year data quality.
+# Selection criteria: Lowest missing target % and complete roomT/outsideT sensors.
 DEFAULT_SYSTEMS = [
-    {"series_id": 615, "capacity_kw": 8},
-    {"series_id": 364, "capacity_kw": 8},
-    {"series_id": 44, "capacity_kw": 8},
-    {"series_id": 162, "capacity_kw": 6},
-    {"series_id": 351, "capacity_kw": 6},
-    {"series_id": 587, "capacity_kw": 6},
-    {"series_id": 228, "capacity_kw": 4},
+    # 8kW Systems
+    {"series_id": 44,  "capacity_kw": 8},  # 0.8% overall missing
+    {"series_id": 72,  "capacity_kw": 8},  # 1.51% overall missing
+    {"series_id": 224, "capacity_kw": 8},  # 18.64% overall missing
+
+    # 6kW Systems
+    {"series_id": 162, "capacity_kw": 6},  # 0.72% overall missing
+    {"series_id": 117, "capacity_kw": 6},  # 5.62% overall missing
+    {"series_id": 810, "capacity_kw": 6},  # 27.1% overall missing
+
+    # 4kW System
+    {"series_id": 147, "capacity_kw": 4},  # 10.77% overall missing
 ]
 
 
@@ -36,7 +43,7 @@ def parse_system_id_filter_from_env() -> list[int] | None:
     - SYSTEM_ID_FILTER
 
     Format:
-    - CSV of numeric IDs: 615,44,228
+    - CSV of numeric IDs: 44,72,147
     """
     raw = os.getenv("SYSTEM_IDS", "").strip()
     if not raw:
@@ -66,7 +73,7 @@ def parse_systems_from_env() -> list[dict]:
 
     Supported formats in SYSTEMS_CONFIG:
     - JSON list: [{"series_id": 44, "capacity_kw": 8}, ...]
-    - CSV-like: 44:8,162:6,228:4
+    - CSV-like: 44:8,72:8,147:4
     """
     raw = os.getenv("SYSTEMS_CONFIG", "").strip()
     id_filter = parse_system_id_filter_from_env()

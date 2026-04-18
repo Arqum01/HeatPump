@@ -11,6 +11,7 @@ The app is an AI Ops console for your heat pump project. It provides:
 - Model health dashboard
 - Live batch scoring
 - Single-row prediction editor
+- System metadata lookup
 - Gemini-assisted analysis
 
 Tabs inside the app:
@@ -20,7 +21,8 @@ Tabs inside the app:
 3. Model Health
 4. Live Scoring
 5. Single Input
-6. Gemini
+6. System Metadata
+7. Gemini
 
 ## 2. Prerequisites
 
@@ -90,8 +92,8 @@ Use this tab to run pipeline scripts without manual terminal commands.
 
 Examples:
 
-- `SYSTEM_IDS = 615,44,228`
-- `TRAIN_SYSTEM_IDS = 615,44`
+- `SYSTEM_IDS = <comma-separated series_id values from src/01_fetch_data.py>`
+- `TRAIN_SYSTEM_IDS = <optional subset of SYSTEM_IDS>`
 
 #### 01 Fetch Data options
 
@@ -146,7 +148,7 @@ Supported previews:
 
 ## 7. Model Health Tab
 
-Reads latest `models/run_manifest_*.json` and displays:
+Lets you select feature policy and run tag, then displays:
 
 - R2 and MAE for electricity and heat
 - Energy/Heat/COP error percentages
@@ -190,11 +192,22 @@ Purpose: predict one row interactively.
 - Predicted COP
 - Full scored row table
 
-## 10. Gemini Tab
+## 10. System Metadata Tab
+
+Purpose: fetch and inspect public HeatPumpMonitor metadata for a system ID.
+
+### 10.1 Features
+
+- Lookup by system ID
+- Clear API cache from UI
+- Structured metadata display sections
+- Raw JSON view
+
+## 11. Gemini Tab
 
 Purpose: ask LLM-based diagnostics on manifests, monitoring, and predictions.
 
-### 10.1 API key setup
+### 11.1 API key setup
 
 You can set key in `.env`:
 
@@ -204,12 +217,13 @@ GEMINI_API_KEY=your_key_here
 
 Or paste key in UI input.
 
-### 10.2 Features
+### 11.2 Features
 
+- Select model context run by policy/tag
 - Ask Gemini with project context (manifest + monitoring)
 - Analyze latest prediction output with an expert prompt template
 
-## 11. Recommended Workflow (UI-Only)
+## 12. Recommended Workflow (UI-Only)
 
 1. Open app.
 2. Go to **Pipeline** tab.
@@ -217,9 +231,10 @@ Or paste key in UI input.
 4. Run full pipeline.
 5. Check **Model Health** for metrics and gates.
 6. Use **Live Scoring** for batch inference.
-7. Use **Gemini** for analysis and next-step suggestions.
+7. Use **System Metadata** for quick public record checks (optional).
+8. Use **Gemini** for analysis and next-step suggestions.
 
-## 12. Common File Outputs Used by App
+## 13. Common File Outputs Used by App
 
 - `models/run_manifest_*.json`
 - `models/training_report.txt`
@@ -227,34 +242,34 @@ Or paste key in UI input.
 - `models/walk_forward_summary.json`
 - `data/processed/ui_predictions_*.csv`
 
-## 13. Troubleshooting (Streamlit App)
+## 14. Troubleshooting (Streamlit App)
 
-### 13.1 App does not start
+### 14.1 App does not start
 
 - Confirm venv activation.
 - Run from project root.
 - Ensure Streamlit is installed in `.venv`.
 
-### 13.2 No pipeline stages appear
+### 14.2 No pipeline stages appear
 
 - Confirm `src` exists and has stage files (`01_*.py`, etc.).
 
-### 13.3 Training run tags not visible in scoring tabs
+### 14.3 Training run tags not visible in scoring tabs
 
 - Run training stage successfully from Pipeline tab first.
 - Verify `models/run_manifest_*.json` exists.
 
-### 13.4 "No rows found for selected SYSTEM_IDS"
+### 14.4 "No rows found for selected SYSTEM_IDS"
 
 - Check IDs are valid and comma-separated.
 - Remove system filters and rerun to verify base flow.
 
-### 13.5 Gemini does not respond
+### 14.5 Gemini does not respond
 
 - Verify `GEMINI_API_KEY` is valid.
 - Check internet connection and selected model.
 
-## 14. Quick Start (Copy/Paste)
+## 15. Quick Start (Copy/Paste)
 
 ```powershell
 .\.venv\Scripts\Activate.ps1

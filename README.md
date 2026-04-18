@@ -1,12 +1,17 @@
 # Heat Pump Forecast Workspace
 
-This project contains a full pipeline for heat pump forecasting and a Streamlit interface for side-by-side model iteration.
+This project contains a full heat pump forecasting pipeline, an admin AI Ops Streamlit app, and a customer-facing Streamlit app.
 
-## Full Guide
+## Documentation Map
 
-For complete setup, configuration, and troubleshooting instructions, see:
+Use these guides for complete setup, operations, and code understanding:
 
 - [PIPELINE_GUIDE.md](PIPELINE_GUIDE.md)
+- [docs/CUSTOMER_APP_DETAILED_DOCUMENTATION.md](docs/CUSTOMER_APP_DETAILED_DOCUMENTATION.md)
+- [docs/SOURCE_CODE_GUIDE.md](docs/SOURCE_CODE_GUIDE.md)
+- [docs/UI_INPUT_SPECIFICATIONS.md](docs/UI_INPUT_SPECIFICATIONS.md)
+- [docs/PIPELINE_TEACHING_GUIDE.md](docs/PIPELINE_TEACHING_GUIDE.md)
+- [PRODUCTION_READINESS_AUDIT.md](PRODUCTION_READINESS_AUDIT.md) (historical snapshot audit)
 
 ## Run Pipeline
 
@@ -24,7 +29,7 @@ You can now run only systems you choose by setting environment variables.
 Use the same IDs across fetch, feature engineering, and training:
 
 ```powershell
-$env:SYSTEM_IDS="615,44,228"
+$env:SYSTEM_IDS="<comma-separated series_id values from src/01_fetch_data.py>"
 .venv\Scripts\python.exe src/01_fetch_data.py
 .venv\Scripts\python.exe src/02_feature_engineering.py
 .venv\Scripts\python.exe src/03_clean_data.py
@@ -34,7 +39,7 @@ $env:SYSTEM_IDS="615,44,228"
 Train on a smaller subset than the raw data (optional):
 
 ```powershell
-$env:TRAIN_SYSTEM_IDS="615,44"
+$env:TRAIN_SYSTEM_IDS="<optional subset of SYSTEM_IDS>"
 .venv\Scripts\python.exe src/04_train_model.py
 ```
 
@@ -53,20 +58,40 @@ $env:DEFAULT_CAPACITY_KW="6"
 .venv\Scripts\python.exe -m streamlit run streamlit_app.py
 ```
 
+## Run Customer Interface (Streamlit)
+
+```powershell
+.venv\Scripts\python.exe -m streamlit run customer_app.py
+```
+
+- `streamlit_app.py` is the full admin and operations console.
+- `customer_app.py` is the customer-facing interface with guided inputs and a simplified experience.
+
 ## Interface Features
 
-- Loads latest training manifest from `models/run_manifest_*.json`
-- Runs dual-target predictions (`pred_elec_w`, `pred_heat_w`)
-- Applies COP physics guardrail (`0 <= COP <= 8`)
-- Adds production-friendly outputs (`pred_elec_kwh`, `pred_heat_kwh`, `pred_cop`)
-- Computes optional evaluation metrics when actual columns are present
-- Integrates Gemini API for model diagnostics and experiment suggestions
+### Admin App (`streamlit_app.py`)
+
+- Pipeline execution with stage-level controls
+- Artifact explorer and model health dashboards
+- Live batch scoring and single-row scoring tools
+- System metadata lookup tab
+- Gemini analysis with selectable model run context
+
+### Customer App (`customer_app.py`)
+
+- Guided instant estimate flow
+- Customer-safe result cards (cost, usage, COP)
+- AI Briefing with broad presets and Custom request option
+- Staff tools behind `CUSTOMER_STAFF_PASSWORD`
+- Appearance, currency, and default unit-rate controls
 
 ## Gemini API Setup
 
-1. Open the Streamlit interface.
-2. Enter your Gemini API key in the Gemini section.
-3. Select a Gemini model and submit a prompt.
+1. Set `GEMINI_API_KEY` in `.env`.
+2. Optionally set `GEMINI_MODEL` in `.env`.
+3. Launch either Streamlit app and use the Gemini-powered section.
+
+Admin app allows entering key/model in UI as well.
 
 The app sends requests to:
 
