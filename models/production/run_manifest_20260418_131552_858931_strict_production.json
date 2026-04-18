@@ -1,0 +1,329 @@
+{
+  "generated_at": "2026-04-18T13:16:29.746794",
+  "input_path": "data/processed/daikin_clean.csv",
+  "feature_policy_mode": "strict_production",
+  "selected_target_strategy": "log1p_both",
+  "walk_forward_tuned_params": {
+    "electricity": {
+      "n_estimators": 1870,
+      "learning_rate": 0.025,
+      "max_depth": 7,
+      "subsample": 0.8,
+      "colsample_bytree": 0.75,
+      "min_child_weight": 8,
+      "reg_alpha": 0.2,
+      "reg_lambda": 2.0,
+      "gamma": 0.1,
+      "random_state": 42,
+      "n_jobs": -1,
+      "early_stopping_rounds": 120,
+      "eval_metric": "mae"
+    },
+    "heat": {
+      "n_estimators": 2600,
+      "learning_rate": 0.015,
+      "max_depth": 9,
+      "subsample": 0.85,
+      "colsample_bytree": 0.8,
+      "min_child_weight": 4,
+      "reg_alpha": 0.1,
+      "reg_lambda": 1.8,
+      "gamma": 0.05,
+      "random_state": 42,
+      "n_jobs": -1,
+      "early_stopping_rounds": 150,
+      "eval_metric": "mae"
+    }
+  },
+  "split_diagnostics": {
+    "train_rows": 83714,
+    "test_rows": 27443,
+    "train_max_timestamp": "2025-07-17 14:00:00+00:00",
+    "test_min_timestamp": "2025-07-17 15:00:00+00:00",
+    "overlap_timestamp_count": 0,
+    "overlap_sample": [],
+    "valid_time_split": true
+  },
+  "feature_schema_path": "models/production/feature_schema_v20260418_131552_858931_strict_production.json",
+  "feature_schema": {
+    "timestamp_column": "timestamp",
+    "id_column": "series_id",
+    "targets": [
+      "heatpump_elec",
+      "heatpump_heat"
+    ],
+    "electricity_features_ordered": [
+      "heatpump_outsideT",
+      "outsideT_3h_avg",
+      "hdh",
+      "heatpump_roomT",
+      "temp_deficit",
+      "load_ratio",
+      "capacity_kw",
+      "hour_sin",
+      "hour_cos",
+      "month_sin",
+      "month_cos",
+      "day_of_week",
+      "is_heating_season"
+    ],
+    "heat_features_ordered": [
+      "heatpump_outsideT",
+      "outsideT_3h_avg",
+      "hdh",
+      "heatpump_roomT",
+      "temp_deficit",
+      "load_ratio",
+      "capacity_kw",
+      "hour_sin",
+      "hour_cos",
+      "month_sin",
+      "month_cos",
+      "day_of_week",
+      "is_heating_season"
+    ],
+    "all_serving_features_ordered": [
+      "heatpump_outsideT",
+      "outsideT_3h_avg",
+      "hdh",
+      "heatpump_roomT",
+      "temp_deficit",
+      "load_ratio",
+      "capacity_kw",
+      "hour_sin",
+      "hour_cos",
+      "month_sin",
+      "month_cos",
+      "day_of_week",
+      "is_heating_season"
+    ],
+    "feature_dtypes": {
+      "heatpump_outsideT": "float",
+      "outsideT_3h_avg": "float",
+      "hdh": "float",
+      "heatpump_roomT": "float",
+      "temp_deficit": "float",
+      "load_ratio": "float",
+      "capacity_kw": "float",
+      "hour_sin": "float",
+      "hour_cos": "float",
+      "month_sin": "float",
+      "month_cos": "float",
+      "day_of_week": "int",
+      "is_heating_season": "int"
+    },
+    "required_serving_columns": [
+      "heatpump_outsideT",
+      "outsideT_3h_avg",
+      "hdh",
+      "heatpump_roomT",
+      "temp_deficit",
+      "load_ratio",
+      "capacity_kw",
+      "hour_sin",
+      "hour_cos",
+      "month_sin",
+      "month_cos",
+      "day_of_week",
+      "is_heating_season"
+    ]
+  },
+  "features": {
+    "electricity": [
+      "heatpump_outsideT",
+      "outsideT_3h_avg",
+      "hdh",
+      "heatpump_roomT",
+      "temp_deficit",
+      "load_ratio",
+      "capacity_kw",
+      "hour_sin",
+      "hour_cos",
+      "month_sin",
+      "month_cos",
+      "day_of_week",
+      "is_heating_season"
+    ],
+    "heat": [
+      "heatpump_outsideT",
+      "outsideT_3h_avg",
+      "hdh",
+      "heatpump_roomT",
+      "temp_deficit",
+      "load_ratio",
+      "capacity_kw",
+      "hour_sin",
+      "hour_cos",
+      "month_sin",
+      "month_cos",
+      "day_of_week",
+      "is_heating_season"
+    ]
+  },
+  "targets": [
+    "heatpump_elec",
+    "heatpump_heat"
+  ],
+  "models": {
+    "electricity": "models/production/xgb_elec_v20260418_131552_858931_strict_production.json",
+    "heat": "models/production/xgb_heat_v20260418_131552_858931_strict_production.json"
+  },
+  "metrics": {
+    "r2_elec": 0.33667852811907917,
+    "r2_heat": 0.2727413088668237,
+    "mae_elec_w": 228.04117840579406,
+    "mae_heat_w": 834.3270494887915,
+    "true_elec_kwh": 10693.169083850518,
+    "pred_elec_kwh": 11959.500280167358,
+    "true_heat_kwh": 44251.10850096925,
+    "pred_heat_kwh": 45259.55105806624,
+    "energy_err_pct": 11.842431241729182,
+    "heat_err_pct": 2.278909142072458,
+    "true_cop": 4.138259495756033,
+    "pred_cop": 3.784401521618835,
+    "cop_err_pct": 8.550888954646151,
+    "cop_physical_valid_pct": 100.0,
+    "cop_physical_invalid_count": 0,
+    "cop_adjusted_count": 0,
+    "off_forced_count": 10990,
+    "runtime_false_negative_count": 2310,
+    "leakage_flag": false
+  },
+  "strategy_scores": [
+    {
+      "strategy": "log1p_both",
+      "score_total_mae": 1531.5600276487112,
+      "mae_elec_w": 304.80026431283096,
+      "mae_heat_w": 1226.7597633358803
+    },
+    {
+      "strategy": "none",
+      "score_total_mae": 1735.0959209234215,
+      "mae_elec_w": 356.0336332710143,
+      "mae_heat_w": 1379.0622876524073
+    },
+    {
+      "strategy": "cop_ratio_heat",
+      "score_total_mae": 1793.797820819102,
+      "mae_elec_w": 356.0336332710143,
+      "mae_heat_w": 1437.7641875480876
+    }
+  ],
+  "slice_error_analysis_top10": [
+    {
+      "series_id": 224,
+      "capacity_kw": 8,
+      "rows": 4511,
+      "mae_elec_w": 501.12367905730827,
+      "mae_heat_w": 2040.5716668927848,
+      "r2_elec": 0.046981713850424045,
+      "r2_heat": -0.09967776984318855
+    },
+    {
+      "series_id": 117,
+      "capacity_kw": 6,
+      "rows": 3097,
+      "mae_elec_w": 414.45973117365514,
+      "mae_heat_w": 1750.7776175280435,
+      "r2_elec": 0.2578307591086805,
+      "r2_heat": -0.05719366396459513
+    },
+    {
+      "series_id": 162,
+      "capacity_kw": 6,
+      "rows": 4411,
+      "mae_elec_w": 365.1350499363076,
+      "mae_heat_w": 1470.9671741876816,
+      "r2_elec": -0.4408623788894812,
+      "r2_heat": -0.5805986314330578
+    },
+    {
+      "series_id": 147,
+      "capacity_kw": 4,
+      "rows": 4518,
+      "mae_elec_w": 316.46781470992033,
+      "mae_heat_w": 1372.487491454002,
+      "r2_elec": -0.18700668179916047,
+      "r2_heat": -0.5909617229709947
+    },
+    {
+      "series_id": 44,
+      "capacity_kw": 8,
+      "rows": 2996,
+      "mae_elec_w": 370.8973755567112,
+      "mae_heat_w": 1336.676449074858,
+      "r2_elec": 0.10093199275530185,
+      "r2_heat": -0.05371512413722512
+    },
+    {
+      "series_id": 72,
+      "capacity_kw": 8,
+      "rows": 4135,
+      "mae_elec_w": 231.15284430040063,
+      "mae_heat_w": 834.0707086798332,
+      "r2_elec": -0.13837137128064647,
+      "r2_heat": 0.06076307133181458
+    },
+    {
+      "series_id": 810,
+      "capacity_kw": 6,
+      "rows": 3775,
+      "mae_elec_w": 166.4116578797355,
+      "mae_heat_w": 623.899762039843,
+      "r2_elec": 0.2691752135412554,
+      "r2_heat": 0.18333617422586757
+    }
+  ],
+  "slice_calibrator_count": 7,
+  "classifier": {
+    "confusion_matrix": [
+      [
+        8680,
+        2709
+      ],
+      [
+        2310,
+        13744
+      ]
+    ],
+    "classification_report": "              precision    recall  f1-score   support\n\n         OFF     0.7898    0.7621    0.7757     11389\n          ON     0.8353    0.8561    0.8456     16054\n\n    accuracy                         0.8171     27443\n   macro avg     0.8126    0.8091    0.8107     27443\nweighted avg     0.8164    0.8171    0.8166     27443\n",
+    "tn": 8680,
+    "fp": 2709,
+    "fn": 2310,
+    "tp": 13744
+  },
+  "gates": {
+    "science_gates": {
+      "r2_elec_pass": false,
+      "r2_heat_pass": false,
+      "mae_elec_pass": false,
+      "mae_heat_pass": false
+    },
+    "business_gates": {
+      "energy_err_pass": false,
+      "heat_err_pass": true,
+      "cop_err_pass": false,
+      "cop_physical_pass": true,
+      "leakage_pass": true,
+      "runtime_fn_pass": false
+    },
+    "summary": {
+      "science_overall_pass": false,
+      "business_overall_pass": false,
+      "production_ready_pass": false,
+      "research_ready_pass": false
+    }
+  },
+  "pipeline_artifacts": {
+    "runtime_model": "models/production/xgb_runtime_clf_v20260418_131552_858931_strict_production.joblib",
+    "electricity_imputer": "models/production/imputer_elec_v20260418_131552_858931_strict_production.joblib",
+    "heat_imputer": "models/production/imputer_heat_v20260418_131552_858931_strict_production.joblib",
+    "pipeline_meta": "models/production/pipeline_meta_v20260418_131552_858931_strict_production.json",
+    "slice_calibrators": "models/production/slice_calibrators_v20260418_131552_858931_strict_production.json",
+    "target_strategy": "log1p_both"
+  },
+  "imputer_strategy": {
+    "electricity": "median_fit_train_only",
+    "heat": "median_fit_train_only"
+  }
+}

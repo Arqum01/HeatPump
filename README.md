@@ -11,6 +11,7 @@ Use these guides for complete setup, operations, and code understanding:
 - [docs/SOURCE_CODE_GUIDE.md](docs/SOURCE_CODE_GUIDE.md)
 - [docs/UI_INPUT_SPECIFICATIONS.md](docs/UI_INPUT_SPECIFICATIONS.md)
 - [docs/PIPELINE_TEACHING_GUIDE.md](docs/PIPELINE_TEACHING_GUIDE.md)
+- [docs/VERCEL_DEPLOYMENT_GUIDE.md](docs/VERCEL_DEPLOYMENT_GUIDE.md)
 - [PRODUCTION_READINESS_AUDIT.md](PRODUCTION_READINESS_AUDIT.md) (historical snapshot audit)
 
 ## Run Pipeline
@@ -66,6 +67,40 @@ $env:DEFAULT_CAPACITY_KW="6"
 
 - `streamlit_app.py` is the full admin and operations console.
 - `customer_app.py` is the customer-facing interface with guided inputs and a simplified experience.
+
+## Deploy Production API On Vercel
+
+The repository now includes a serverless API entrypoint for Vercel at `api/index.py`.
+
+### 1. Prepare a minimal model bundle
+
+Run this before deployment so Vercel only ships required artifacts:
+
+```powershell
+.venv\Scripts\python.exe scripts/prepare_production_bundle.py
+```
+
+This creates `models/production` with the latest run manifest and required model files.
+
+### 2. Configure Vercel environment variables
+
+- `MODEL_DIR=models/production`
+- `MODEL_RUN_TAG=<optional specific run tag>`
+- `CORS_ORIGINS=<comma-separated allowed origins>`
+- `GEMINI_API_KEY=<optional, if you use Gemini features in other services>`
+
+### 3. Deploy
+
+```powershell
+vercel --prod
+```
+
+### 4. API routes
+
+- `GET /api/health`
+- `GET /api/runs`
+- `POST /api/predict/technical`
+- `POST /api/predict/customer`
 
 ## Interface Features
 

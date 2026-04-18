@@ -1,0 +1,83 @@
+{
+  "timestamp_column": "timestamp",
+  "id_column": "series_id",
+  "targets": [
+    "heatpump_elec",
+    "heatpump_heat"
+  ],
+  "electricity_features_ordered": [
+    "heatpump_outsideT",
+    "outsideT_3h_avg",
+    "hdh",
+    "heatpump_roomT",
+    "temp_deficit",
+    "load_ratio",
+    "capacity_kw",
+    "hour_sin",
+    "hour_cos",
+    "month_sin",
+    "month_cos",
+    "day_of_week",
+    "is_heating_season"
+  ],
+  "heat_features_ordered": [
+    "heatpump_outsideT",
+    "outsideT_3h_avg",
+    "hdh",
+    "heatpump_roomT",
+    "temp_deficit",
+    "load_ratio",
+    "capacity_kw",
+    "hour_sin",
+    "hour_cos",
+    "month_sin",
+    "month_cos",
+    "day_of_week",
+    "is_heating_season"
+  ],
+  "all_serving_features_ordered": [
+    "heatpump_outsideT",
+    "outsideT_3h_avg",
+    "hdh",
+    "heatpump_roomT",
+    "temp_deficit",
+    "load_ratio",
+    "capacity_kw",
+    "hour_sin",
+    "hour_cos",
+    "month_sin",
+    "month_cos",
+    "day_of_week",
+    "is_heating_season"
+  ],
+  "feature_dtypes": {
+    "heatpump_outsideT": "float",
+    "outsideT_3h_avg": "float",
+    "hdh": "float",
+    "heatpump_roomT": "float",
+    "temp_deficit": "float",
+    "load_ratio": "float",
+    "capacity_kw": "float",
+    "hour_sin": "float",
+    "hour_cos": "float",
+    "month_sin": "float",
+    "month_cos": "float",
+    "day_of_week": "int",
+    "is_heating_season": "int"
+  },
+  "required_serving_columns": [
+    "heatpump_outsideT",
+    "outsideT_3h_avg",
+    "hdh",
+    "heatpump_roomT",
+    "temp_deficit",
+    "load_ratio",
+    "capacity_kw",
+    "hour_sin",
+    "hour_cos",
+    "month_sin",
+    "month_cos",
+    "day_of_week",
+    "is_heating_season"
+  ]
+}
