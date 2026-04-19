@@ -14,6 +14,11 @@ jobs:
           fetch-depth: 0
           lfs: true
 
+      - name: Install git-lfs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git-lfs
+
       - name: Push clean snapshot to hub
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -34,6 +39,12 @@ jobs:
           git checkout -b main
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Track large model artifacts through LFS in the clean snapshot repo.
+          git lfs install --local
+          git lfs track "models/**/*.json"
+          git lfs track "models/**/*.joblib"
+          git add .gitattributes
 
           git add -A
           git commit -m "Sync from GitHub ${GITHUB_SHA}"
