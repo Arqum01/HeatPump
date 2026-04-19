@@ -14,7 +14,28 @@ jobs:
           fetch-depth: 0
           lfs: true
 
-      - name: Push to hub
+      - name: Push clean snapshot to hub
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: git push --force https://zeeshanabbas0556:$HF_TOKEN@huggingface.co/spaces/zeeshanabbas0556/vector-thermal-ai-uk main
+        run: |
+          set -euo pipefail
+          TARGET_DIR="/tmp/hf-space-sync"
+          rm -rf "$TARGET_DIR"
+          mkdir -p "$TARGET_DIR"
+
+          # Sync project files but exclude processed datasets and local git metadata.
+          rsync -a --delete \
+            --exclude '.git' \
+            --exclude 'data/processed' \
+            ./ "$TARGET_DIR"/
+
+          cd "$TARGET_DIR"
+          git init
+          git checkout -b main
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+          git commit -m "Sync from GitHub ${GITHUB_SHA}"
+          git remote add origin "https://zeeshanabbas0556:${HF_TOKEN}@huggingface.co/spaces/zeeshanabbas0556/vector-thermal-ai-uk"
+          git push --force origin main

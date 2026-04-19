@@ -1,5 +1,6 @@
 # dependencies
 data/processed/*.csv
+data/processed/
 .venv
 .env
 
