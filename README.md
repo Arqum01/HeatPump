@@ -2,7 +2,7 @@
 title: Heat Pump Forecast Workspace
 sdk: streamlit
 sdk_version: 1.44.0
-python_version: 3.10
+python_version: "3.10"
 app_file: app.py
 ---
 
