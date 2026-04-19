@@ -6,7 +6,7 @@ import os
 import re
 import subprocess
 import sys
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -1607,7 +1607,7 @@ def render_system_metadata_tab() -> None:
     last_updated_text = "Unknown"
     try:
         if last_updated_unix is not None:
-            last_updated_text = datetime.fromtimestamp(int(last_updated_unix), UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+            last_updated_text = datetime.fromtimestamp(int(last_updated_unix), timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     except Exception:
         last_updated_text = str(last_updated_unix)
 

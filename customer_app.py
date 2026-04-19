@@ -5,7 +5,7 @@ import json
 import math
 import os
 import sys
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -521,7 +521,7 @@ def infer_default(col: str, dtype_label: str) -> Any:
     name = col.lower()
 
     if dtype_label == "datetime":
-        return datetime.now(UTC).isoformat()
+        return datetime.now(timezone.utc).isoformat()
     if dtype_label in {"string", "str"}:
         return ""
     if dtype_label in {"bool", "int"}:
@@ -1137,7 +1137,7 @@ def render_system_info_tab() -> None:
     last_updated = "Unknown"
     try:
         if record.get("last_updated") is not None:
-            last_updated = datetime.fromtimestamp(int(record["last_updated"]), UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+            last_updated = datetime.fromtimestamp(int(record["last_updated"]), timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     except Exception:
         last_updated = str(record.get("last_updated"))
 
