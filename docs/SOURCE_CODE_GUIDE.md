@@ -14,7 +14,6 @@ It is designed for fast onboarding, safe edits, and easier debugging.
 7. `backtest_model_07.py`: Run walk-forward backtesting and slice diagnostics.
 8. `streamlit_app.py`: Admin/ops console for running the pipeline and analyzing outputs.
 9. `customer_app.py`: Customer-facing estimator with guided inputs and AI briefing.
-10. `api/index.py`: Vercel-ready serverless API for production inference.
 
 ---
 
@@ -381,24 +380,6 @@ Customer-facing interface for quick home-level estimates and plain-language AI g
 
 ---
 
-## `api/index.py`
-### Module Role
-Production inference API entrypoint designed for Vercel serverless deployment.
-
-### Key Responsibilities
-- Load model manifests from the active model directory.
-- Expose health and run inventory endpoints.
-- Support both technical row-level inference and simplified customer-style inference.
-- Enforce schema-aligned row construction before scoring.
-
-### High-Impact Endpoints
-- `GET /health`: runtime status and active run metadata.
-- `GET /runs`: available model runs in active model directory.
-- `POST /predict/technical`: inference from provided serving feature rows.
-- `POST /predict/customer`: simplified inference payload with derived model features.
-
----
-
 ## Recommended Reading Order
 1. Start with `01_fetch_data.py` to understand ingestion contracts.
 2. Move to `02_feature_engineering.py` and `03_clean_data.py` for dataset construction.
@@ -407,4 +388,3 @@ Production inference API entrypoint designed for Vercel serverless deployment.
 5. Use `monitoring_model_06.py` and `backtest_model_07.py` for operational and validation context.
 6. Read `streamlit_app.py` for admin/ops execution workflow.
 7. Read `customer_app.py` with docs/CUSTOMER_APP_DETAILED_DOCUMENTATION.md for customer journey details.
-8. Read `api/index.py` with docs/VERCEL_DEPLOYMENT_GUIDE.md for production API deployment.

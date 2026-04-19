@@ -1,3 +1,11 @@
+---
+title: Heat Pump Forecast Workspace
+sdk: streamlit
+sdk_version: 1.44.0
+python_version: 3.10
+app_file: app.py
+---
+
 # Heat Pump Forecast Workspace
 
 This project contains a full heat pump forecasting pipeline, an admin AI Ops Streamlit app, and a customer-facing Streamlit app.
@@ -11,7 +19,6 @@ Use these guides for complete setup, operations, and code understanding:
 - [docs/SOURCE_CODE_GUIDE.md](docs/SOURCE_CODE_GUIDE.md)
 - [docs/UI_INPUT_SPECIFICATIONS.md](docs/UI_INPUT_SPECIFICATIONS.md)
 - [docs/PIPELINE_TEACHING_GUIDE.md](docs/PIPELINE_TEACHING_GUIDE.md)
-- [docs/VERCEL_DEPLOYMENT_GUIDE.md](docs/VERCEL_DEPLOYMENT_GUIDE.md)
 - [PRODUCTION_READINESS_AUDIT.md](PRODUCTION_READINESS_AUDIT.md) (historical snapshot audit)
 
 ## Run Pipeline
@@ -56,7 +63,16 @@ $env:DEFAULT_CAPACITY_KW="6"
 ## Run Interface (Streamlit)
 
 ```powershell
-.venv\Scripts\python.exe -m streamlit run streamlit_app.py
+.venv\Scripts\python.exe -m streamlit run app.py
+```
+
+- `app.py` is the Hugging Face Spaces entrypoint and defaults to the customer interface.
+- Set `SPACE_APP_MODE=admin` to run the admin console through `app.py`.
+
+## Run Admin Interface (Direct)
+
+```powershell
+.venv\Scripts\python.exe -m streamlit run admin_app.py
 ```
 
 ## Run Customer Interface (Streamlit)
@@ -65,46 +81,12 @@ $env:DEFAULT_CAPACITY_KW="6"
 .venv\Scripts\python.exe -m streamlit run customer_app.py
 ```
 
-- `streamlit_app.py` is the full admin and operations console.
+- `admin_app.py` is the full admin and operations console.
 - `customer_app.py` is the customer-facing interface with guided inputs and a simplified experience.
-
-## Deploy Production API On Vercel
-
-The repository now includes a serverless API entrypoint for Vercel at `api/index.py`.
-
-### 1. Prepare a minimal model bundle
-
-Run this before deployment so Vercel only ships required artifacts:
-
-```powershell
-.venv\Scripts\python.exe scripts/prepare_production_bundle.py
-```
-
-This creates `models/production` with the latest run manifest and required model files.
-
-### 2. Configure Vercel environment variables
-
-- `MODEL_DIR=models/production`
-- `MODEL_RUN_TAG=<optional specific run tag>`
-- `CORS_ORIGINS=<comma-separated allowed origins>`
-- `GEMINI_API_KEY=<optional, if you use Gemini features in other services>`
-
-### 3. Deploy
-
-```powershell
-vercel --prod
-```
-
-### 4. API routes
-
-- `GET /api/health`
-- `GET /api/runs`
-- `POST /api/predict/technical`
-- `POST /api/predict/customer`
 
 ## Interface Features
 
-### Admin App (`streamlit_app.py`)
+### Admin App (`admin_app.py`)
 
 - Pipeline execution with stage-level controls
 - Artifact explorer and model health dashboards
@@ -131,4 +113,3 @@ Admin app allows entering key/model in UI as well.
 The app sends requests to:
 
 `https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent`
-

@@ -1,4 +1,4 @@
-﻿"""Serving stage for dual-target heat pump forecasting.
+"""Serving stage for dual-target heat pump forecasting.
 
 Concepts:
 - Schema-first validation to keep train/serve parity.
@@ -8,8 +8,6 @@ Concepts:
 
 import json
 import os
-from functools import lru_cache
-from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
@@ -17,19 +15,7 @@ from xgboost import XGBRegressor
 from monitoring_model_06 import summarize_batch_monitoring, save_monitoring_summary
 
 
-
-ROOT_DIR = Path(__file__).resolve().parents[1]
-DEFAULT_MODEL_DIR = "models/production" if os.getenv("VERCEL") else "models"
-MODEL_DIR = Path(os.getenv("MODEL_DIR", DEFAULT_MODEL_DIR))
-if not MODEL_DIR.is_absolute():
-    MODEL_DIR = ROOT_DIR / MODEL_DIR
-
-
-def _resolve_artifact_path(path_value: str) -> Path:
-    path = Path(path_value)
-    if path.is_absolute():
-        return path
-    return ROOT_DIR / path
+MODEL_DIR = "models"
 
 
 def resolve_latest_run_tag() -> str:
@@ -45,13 +31,12 @@ def resolve_latest_run_tag() -> str:
     suffix = ".json"
     candidates = []
 
-    if not MODEL_DIR.is_dir():
+    if not os.path.isdir(MODEL_DIR):
         raise FileNotFoundError(f"Model directory not found: {MODEL_DIR}")
 
-    for path in MODEL_DIR.glob("run_manifest_*.json"):
-        name = path.name
+    for name in os.listdir(MODEL_DIR):
         if name.startswith(prefix) and name.endswith(suffix):
-            tag = name[len(prefix) : -len(suffix)]
+            tag = name[len(prefix):-len(suffix)]
             if tag:
                 candidates.append(tag)
 
@@ -158,7 +143,6 @@ def validate_inference_frame(
     }
 
 
-@lru_cache(maxsize=8)
 def load_bundle(run_tag: str):
     """Load all trained artifacts needed for inference.
 
@@ -169,29 +153,28 @@ def load_bundle(run_tag: str):
         dict: Bundle containing models, preprocessors, schema, and strategy metadata.
     """
     # Load all artifacts required to reproduce training-time behavior.
-    manifest_path = MODEL_DIR / f"run_manifest_{run_tag}.json"
+    manifest_path = f"{MODEL_DIR}/run_manifest_{run_tag}.json"
     with open(manifest_path, "r", encoding="utf-8") as f:
         manifest = json.load(f)
 
-    feature_schema_path = _resolve_artifact_path(manifest["feature_schema_path"])
+    feature_schema_path = manifest["feature_schema_path"]
     with open(feature_schema_path, "r", encoding="utf-8") as f:
         feature_schema = json.load(f)
 
     elec_model = XGBRegressor()
-    elec_model.load_model(str(_resolve_artifact_path(manifest["models"]["electricity"])))
+    elec_model.load_model(manifest["models"]["electricity"])
 
     heat_model = XGBRegressor()
-    heat_model.load_model(str(_resolve_artifact_path(manifest["models"]["heat"])))
+    heat_model.load_model(manifest["models"]["heat"])
 
-    runtime_model = joblib.load(_resolve_artifact_path(manifest["pipeline_artifacts"]["runtime_model"]))
-    elec_imputer = joblib.load(_resolve_artifact_path(manifest["pipeline_artifacts"]["electricity_imputer"]))
-    heat_imputer = joblib.load(_resolve_artifact_path(manifest["pipeline_artifacts"]["heat_imputer"]))
+    runtime_model = joblib.load(manifest["pipeline_artifacts"]["runtime_model"])
+    elec_imputer = joblib.load(manifest["pipeline_artifacts"]["electricity_imputer"])
+    heat_imputer = joblib.load(manifest["pipeline_artifacts"]["heat_imputer"])
 
     slice_calibrators = {}
     calibrator_path = manifest["pipeline_artifacts"].get("slice_calibrators")
-    resolved_calibrator_path = _resolve_artifact_path(calibrator_path) if calibrator_path else None
-    if resolved_calibrator_path and resolved_calibrator_path.exists():
-        with open(resolved_calibrator_path, "r", encoding="utf-8") as f:
+    if calibrator_path and os.path.exists(calibrator_path):
+        with open(calibrator_path, "r", encoding="utf-8") as f:
             slice_calibrators = json.load(f)
 
     target_strategy = manifest.get("selected_target_strategy", "none")
@@ -326,20 +309,18 @@ def predict_bundle(df: pd.DataFrame, run_tag: str) -> pd.DataFrame:
 
 if __name__ == "__main__":
     run_tag = resolve_latest_run_tag()
-    sample_path = ROOT_DIR / "data" / "processed" / "daikin_clean.csv"
+    sample_path = "data/processed/daikin_clean.csv"
     df = pd.read_csv(sample_path, parse_dates=["timestamp"]).head(100)
 
     preds = predict_bundle(df, run_tag=run_tag)
-    preds.to_csv(ROOT_DIR / "data" / "processed" / "sample_predictions.csv", index=False)
+    preds.to_csv("data/processed/sample_predictions.csv", index=False)
 
     monitoring = summarize_batch_monitoring(
         input_df=df,
         prediction_df=preds,
         reference_df=df,
     )
-    save_monitoring_summary(monitoring, str(MODEL_DIR / "latest_monitoring_summary.json"))
+    save_monitoring_summary(monitoring, "models/latest_monitoring_summary.json")
 
     print(preds.head())
     print(json.dumps(monitoring, indent=2))
-
-

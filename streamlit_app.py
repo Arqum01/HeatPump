@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+from admin_app import main
+
+
+if __name__ == "__main__":
+    main()
+from __future__ import annotations
+
 import importlib.util
 import json
 import os

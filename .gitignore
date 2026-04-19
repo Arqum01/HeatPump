@@ -2,7 +2,6 @@
 data/processed/*.csv
 .venv
 .env
-.vercel
 
 # python cache
 __pycache__/
