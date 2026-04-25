@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-04-18T13:17:33.946054",
+  "generated_at": "2026-04-25T07:47:07.385676",
   "feature_policy_mode": "enhanced_onestep",
   "fold_count": 5,
-  "avg_r2_elec": 0.8190877500591455,
-  "avg_r2_heat": 0.8532804772023243,
-  "avg_mae_elec_w": 87.28059641325095,
-  "avg_mae_heat_w": 249.67646440208355,
-  "avg_energy_err_pct": 6.97068360543084,
-  "avg_heat_err_pct": 1.857984137151106,
-  "avg_cop_err_pct": 7.319156664725108,
-  "max_runtime_false_negative_count": 0
+  "avg_r2_elec": 0.8275749508209296,
+  "avg_r2_heat": 0.8543936812143059,
+  "avg_mae_elec_w": 80.93830412094167,
+  "avg_mae_heat_w": 221.7071926767484,
+  "avg_energy_err_pct": 13.169679626514062,
+  "avg_heat_err_pct": 1.4504498907020345,
+  "avg_cop_err_pct": 10.073165638581004,
+  "max_runtime_false_negative_count": 1
 }

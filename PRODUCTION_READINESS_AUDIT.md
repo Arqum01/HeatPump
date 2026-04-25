@@ -1384,7 +1384,10 @@ Target Strategy Comparison:
 | `src/05_predict_model.py` | Inference pipeline |
 | `src/monitoring_model_06.py` | Batch monitoring |
 | `src/backtest_model_07.py` | Walk-forward validation (5-fold) |
-| `streamlit_app.py` | UI application |
+| `app.py` | UI router entrypoint (mode-based) |
+| `customer_app.py` | Customer UI application |
+| `admin_app.py` | Admin UI application |
+| `streamlit_app.py` | Legacy compatibility entrypoint |
 
 ### Model Artifacts Reference
 

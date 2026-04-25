@@ -7,7 +7,6 @@ Concepts:
 """
 
 import pandas as pd
-import numpy as np
 import os
 import logging
 
@@ -107,7 +106,9 @@ def apply_boundary_rules(df: pd.DataFrame) -> pd.DataFrame:
 
     df = df[mask].copy()
     after = len(df)
-    logging.info(f"Boundary rules: removed {before - after} rows ({(before-after)/before*100:.1f}%)")
+    removed_rows = before - after
+    removed_pct = (removed_rows / before * 100.0) if before else 0.0
+    logging.info(f"Boundary rules: removed {removed_rows} rows ({removed_pct:.1f}%)")
     return df
 
 

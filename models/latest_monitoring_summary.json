@@ -1,46 +1,46 @@
 {
-  "generated_at": "2026-04-18T13:17:35.125923",
+  "generated_at": "2026-04-25T07:47:08.514102",
   "input_rows": 100,
   "prediction_rows": 100,
   "successful_prediction_rate": 1.0,
   "top_null_rate_features": {
-    "heatpump_roomT": 1.0,
-    "load_ratio": 1.0,
-    "temp_deficit": 1.0,
-    "heat_lag168": 1.0,
     "elec_lag168": 1.0,
-    "cop_lag1": 0.52,
-    "cop": 0.51,
-    "elec_lag24": 0.24,
-    "heat_lag24": 0.22,
-    "elec_lag6": 0.06
+    "heat_lag168": 1.0,
+    "cop_lag1": 0.32,
+    "cop": 0.3,
+    "elec_lag24": 0.21,
+    "heating_on_lag24": 0.21,
+    "heat_lag24": 0.21,
+    "elec_lag6": 0.06,
+    "elec_lag4": 0.04,
+    "elec_lag3": 0.03
   },
   "prediction_ranges": {
     "pred_heatpump_elec_min": 50.0,
-    "pred_heatpump_elec_max": 537.71581879989,
+    "pred_heatpump_elec_max": 1825.230358631908,
     "pred_heatpump_heat_min": 0.0,
-    "pred_heatpump_heat_max": 2063.489388342151,
+    "pred_heatpump_heat_max": 5947.325381669454,
     "pred_cop_min": 0.0,
-    "pred_cop_max": 3.992499203565272
+    "pred_cop_max": 4.682646387961308
   },
   "runtime_classifier": {
-    "predicted_on_rate": 0.21,
-    "predicted_off_rate": 0.79
+    "predicted_on_rate": 0.7,
+    "predicted_off_rate": 0.30000000000000004
   },
   "guardrail_counts": {
     "cop_guardrail_adjusted_count": 0
   },
   "alerts": [],
   "feature_mean_shift_zscore": {
-    "heatpump_roomT": NaN,
-    "capacity_kw": 1.0237273408374814,
-    "temp_deficit": NaN,
-    "load_ratio": NaN,
-    "month_sin": 1.0788007202670642,
-    "month_cos": 1.0567241724494434,
-    "cop": 0.9094697576274411,
-    "month": 0.6322697837395241,
-    "elec_lag168": NaN,
-    "heat_lag168": NaN
+    "month": 1.4894570578927577,
+    "heatpump_returnT": 1.161551702163054,
+    "returnT_lag1": 1.1533940534098093,
+    "month_cos": 1.0740355081598327,
+    "capacity_kw": 1.0487503245646623,
+    "heatpump_flowT": 1.001329550896924,
+    "flowT_lag1": 0.9922200745684667,
+    "cop": 0.9369319684119628,
+    "deltaT_lift": 0.9246233843766382,
+    "elec_lag1": 0.8465949834225959
   }
 }

@@ -4,8 +4,10 @@ import importlib.util
 import json
 import math
 import os
+import random
+import sqlite3
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +22,44 @@ MODELS_DIR = ROOT / "models"
 PROCESSED_DIR = ROOT / "data" / "processed"
 SYSTEM_LIST_PUBLIC_URL = "https://heatpumpmonitor.org/system/list/public.json"
 BASE_TEMP_C = 15.5
+DEMO_DB_PATH = PROCESSED_DIR / "demo_heatpump_store.sqlite3"
+PREDICTION_HISTORY_RETENTION_DAYS = 180
+DEMO_SUPPORTED_CAPACITIES = [4, 6, 8]
+DEMO_SYSTEMS_BY_CAPACITY: dict[int, list[int]] = {
+    4: [147],
+    6: [117, 162, 810],
+    8: [44, 72, 224],
+}
+GEMINI_LAYER2_SCHEMA: dict[str, Any] = {
+    "type": "OBJECT",
+    "properties": {
+        "outside_t_3h": {"type": "NUMBER"},
+        "elec_lag1": {"type": "NUMBER"},
+        "elec_lag24": {"type": "NUMBER"},
+        "elec_lag168": {"type": "NUMBER"},
+        "heat_lag1": {"type": "NUMBER"},
+        "heat_lag24": {"type": "NUMBER"},
+        "heat_lag168": {"type": "NUMBER"},
+        "cop_lag1": {"type": "NUMBER"},
+        "heating_on_lag1": {"type": "BOOLEAN"},
+        "heating_on_lag24": {"type": "BOOLEAN"},
+        "run_hours": {"type": "INTEGER"},
+        "rationale": {"type": "STRING"},
+    },
+    "required": [
+        "outside_t_3h",
+        "elec_lag1",
+        "elec_lag24",
+        "elec_lag168",
+        "heat_lag1",
+        "heat_lag24",
+        "heat_lag168",
+        "cop_lag1",
+        "heating_on_lag1",
+        "heating_on_lag24",
+        "run_hours",
+    ],
+}
 
 
 def load_env_file(env_path: Path) -> None:
@@ -35,6 +75,705 @@ def load_env_file(env_path: Path) -> None:
         value = value.strip().strip('"').strip("'")
         if key and key not in os.environ:
             os.environ[key] = value
+
+
+def normalize_capacity_profile(capacity_kw: float) -> int:
+    return min(DEMO_SUPPORTED_CAPACITIES, key=lambda option: abs(float(capacity_kw) - float(option)))
+
+
+def ensure_demo_telemetry_store() -> None:
+    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(DEMO_DB_PATH) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS demo_telemetry_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                captured_at TEXT NOT NULL,
+                system_id INTEGER NOT NULL,
+                capacity_kw INTEGER NOT NULL,
+                outside_t REAL NOT NULL,
+                outside_t_3h REAL NOT NULL,
+                room_t REAL NOT NULL,
+                elec_lag1 REAL NOT NULL,
+                elec_lag24 REAL NOT NULL,
+                elec_lag168 REAL NOT NULL,
+                heat_lag1 REAL NOT NULL,
+                heat_lag24 REAL NOT NULL,
+                heat_lag168 REAL NOT NULL,
+                cop_lag1 REAL NOT NULL,
+                heating_on_lag1 INTEGER NOT NULL,
+                heating_on_lag24 INTEGER NOT NULL,
+                run_hours INTEGER NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_demo_telemetry_lookup
+            ON demo_telemetry_snapshots (capacity_kw, captured_at DESC)
+            """
+        )
+        retention_cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+        conn.execute(
+            "DELETE FROM demo_telemetry_snapshots WHERE captured_at < ?",
+            (retention_cutoff,),
+        )
+
+
+def ensure_prediction_history_store() -> None:
+    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(DEMO_DB_PATH) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS prediction_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT NOT NULL,
+                run_tag TEXT NOT NULL,
+                source_layer1 TEXT NOT NULL,
+                source_layer2 TEXT NOT NULL,
+                system_id INTEGER NOT NULL,
+                capacity_kw INTEGER NOT NULL,
+                outside_t REAL NOT NULL,
+                room_t REAL NOT NULL,
+                outside_t_3h REAL NOT NULL,
+                elec_lag1 REAL NOT NULL,
+                elec_lag24 REAL NOT NULL,
+                elec_lag168 REAL NOT NULL,
+                heat_lag1 REAL NOT NULL,
+                heat_lag24 REAL NOT NULL,
+                heat_lag168 REAL NOT NULL,
+                cop_lag1 REAL NOT NULL,
+                heating_on_lag1 INTEGER NOT NULL,
+                heating_on_lag24 INTEGER NOT NULL,
+                run_hours INTEGER NOT NULL,
+                pred_heatpump_elec REAL,
+                pred_heatpump_heat REAL,
+                pred_cop REAL,
+                runtime_on_proba REAL,
+                cop_guardrail_adjusted INTEGER,
+                input_json TEXT NOT NULL,
+                layer1_json TEXT NOT NULL,
+                layer2_json TEXT NOT NULL,
+                prediction_json TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_prediction_history_capacity_time
+            ON prediction_history (capacity_kw, created_at DESC)
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_prediction_history_system_time
+            ON prediction_history (system_id, created_at DESC)
+            """
+        )
+        retention_cutoff = (datetime.now(timezone.utc) - timedelta(days=PREDICTION_HISTORY_RETENTION_DAYS)).isoformat()
+        conn.execute(
+            "DELETE FROM prediction_history WHERE created_at < ?",
+            (retention_cutoff,),
+        )
+
+
+def _parse_iso_utc(value: str | datetime) -> datetime:
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        dt = datetime.fromisoformat(str(value))
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        numeric = float(value)
+        if math.isnan(numeric):
+            return default
+        return numeric
+    except Exception:
+        return default
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(round(float(value)))
+    except Exception:
+        return default
+
+
+def _pick_lag_row(
+    rows: list[sqlite3.Row],
+    now_utc: datetime,
+    target_hours: float,
+    min_hours: float,
+    max_hours: float,
+) -> sqlite3.Row | None:
+    best_row: sqlite3.Row | None = None
+    best_delta = float("inf")
+
+    for row in rows:
+        created_at = _parse_iso_utc(str(row["created_at"]))
+        age_hours = (now_utc - created_at).total_seconds() / 3600.0
+        if age_hours < min_hours or age_hours > max_hours:
+            continue
+        delta = abs(age_hours - target_hours)
+        if delta < best_delta:
+            best_delta = delta
+            best_row = row
+    return best_row
+
+
+def get_layer1_inputs_from_prediction_history(
+    capacity_kw: float,
+    now_utc: datetime,
+) -> tuple[dict[str, Any] | None, str]:
+    ensure_prediction_history_store()
+    profile_capacity = normalize_capacity_profile(capacity_kw)
+
+    with sqlite3.connect(DEMO_DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM prediction_history
+            WHERE capacity_kw = ?
+            ORDER BY created_at DESC
+            LIMIT 1000
+            """,
+            (profile_capacity,),
+        ).fetchall()
+
+    if not rows:
+        return None, "No historical predictions available yet for this capacity profile."
+
+    lag1_row = _pick_lag_row(rows, now_utc, target_hours=1.0, min_hours=0.08, max_hours=8.0)
+    if lag1_row is None:
+        lag1_row = rows[0]
+
+    lag24_row = _pick_lag_row(rows, now_utc, target_hours=24.0, min_hours=6.0, max_hours=48.0)
+    lag168_row = _pick_lag_row(rows, now_utc, target_hours=168.0, min_hours=72.0, max_hours=336.0)
+
+    if lag24_row is None:
+        lag24_row = lag1_row
+    if lag168_row is None:
+        lag168_row = lag24_row
+
+    recent_outside_vals: list[float] = []
+    for row in rows:
+        created_at = _parse_iso_utc(str(row["created_at"]))
+        age_hours = (now_utc - created_at).total_seconds() / 3600.0
+        if 0.0 <= age_hours <= 3.0:
+            recent_outside_vals.append(_safe_float(row["outside_t"], default=0.0))
+    outside_t_3h = sum(recent_outside_vals) / len(recent_outside_vals) if recent_outside_vals else _safe_float(lag1_row["outside_t_3h"], 0.0)
+
+    layer1_inputs = {
+        "outside_t_3h": float(round(outside_t_3h, 2)),
+        "elec_lag1": float(_safe_float(lag1_row["elec_lag1"], 0.0)),
+        "elec_lag24": float(_safe_float(lag24_row["elec_lag1"], 0.0)),
+        "elec_lag168": float(_safe_float(lag168_row["elec_lag1"], 0.0)),
+        "heat_lag1": float(_safe_float(lag1_row["heat_lag1"], 0.0)),
+        "heat_lag24": float(_safe_float(lag24_row["heat_lag1"], 0.0)),
+        "heat_lag168": float(_safe_float(lag168_row["heat_lag1"], 0.0)),
+        "cop_lag1": float(_safe_float(lag1_row["cop_lag1"], 0.0)),
+        "heating_on_lag1": bool(_safe_int(lag1_row["heating_on_lag1"], 0)),
+        "heating_on_lag24": bool(_safe_int(lag24_row["heating_on_lag1"], 0)),
+        "run_hours": int(max(0, min(72, _safe_int(lag1_row["run_hours"], 0)))),
+        "system_id": int(_safe_int(lag1_row["system_id"], 0)),
+    }
+
+    return layer1_inputs, "Using persisted prediction history for lag simulation."
+
+
+def save_prediction_history_entry(
+    run_tag: str,
+    user_inputs: dict[str, Any],
+    layer1_inputs: dict[str, Any],
+    layer2_inputs: dict[str, Any],
+    layer_status: dict[str, str],
+    scored_row: dict[str, Any],
+) -> None:
+    ensure_prediction_history_store()
+
+    created_at = _parse_iso_utc(str(user_inputs.get("timestamp", datetime.now(timezone.utc).isoformat()))).isoformat()
+    input_json = json.dumps(user_inputs, default=str)
+    layer1_json = json.dumps(layer1_inputs, default=str)
+    layer2_json = json.dumps(layer2_inputs, default=str)
+    prediction_json = json.dumps(scored_row, default=str)
+
+    with sqlite3.connect(DEMO_DB_PATH) as conn:
+        conn.execute(
+            """
+            INSERT INTO prediction_history (
+                created_at,
+                run_tag,
+                source_layer1,
+                source_layer2,
+                system_id,
+                capacity_kw,
+                outside_t,
+                room_t,
+                outside_t_3h,
+                elec_lag1,
+                elec_lag24,
+                elec_lag168,
+                heat_lag1,
+                heat_lag24,
+                heat_lag168,
+                cop_lag1,
+                heating_on_lag1,
+                heating_on_lag24,
+                run_hours,
+                pred_heatpump_elec,
+                pred_heatpump_heat,
+                pred_cop,
+                runtime_on_proba,
+                cop_guardrail_adjusted,
+                input_json,
+                layer1_json,
+                layer2_json,
+                prediction_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                created_at,
+                str(run_tag),
+                str(layer_status.get("layer1", "unknown")),
+                str(layer_status.get("layer2", "unknown")),
+                _safe_int(layer2_inputs.get("system_id", user_inputs.get("system_id", 0)), 0),
+                _safe_int(user_inputs.get("capacity_kw", 0), 0),
+                _safe_float(user_inputs.get("outside_t", 0.0), 0.0),
+                _safe_float(user_inputs.get("room_t", 0.0), 0.0),
+                _safe_float(layer2_inputs.get("outside_t_3h", user_inputs.get("outside_t", 0.0)), 0.0),
+                _safe_float(layer2_inputs.get("elec_lag1", 0.0), 0.0),
+                _safe_float(layer2_inputs.get("elec_lag24", 0.0), 0.0),
+                _safe_float(layer2_inputs.get("elec_lag168", 0.0), 0.0),
+                _safe_float(layer2_inputs.get("heat_lag1", 0.0), 0.0),
+                _safe_float(layer2_inputs.get("heat_lag24", 0.0), 0.0),
+                _safe_float(layer2_inputs.get("heat_lag168", 0.0), 0.0),
+                _safe_float(layer2_inputs.get("cop_lag1", 0.0), 0.0),
+                _safe_int(layer2_inputs.get("heating_on_lag1", 0), 0),
+                _safe_int(layer2_inputs.get("heating_on_lag24", 0), 0),
+                _safe_int(layer2_inputs.get("run_hours", 0), 0),
+                _safe_float(scored_row.get("pred_heatpump_elec", 0.0), 0.0),
+                _safe_float(scored_row.get("pred_heatpump_heat", 0.0), 0.0),
+                _safe_float(scored_row.get("pred_cop", 0.0), 0.0),
+                _safe_float(scored_row.get("runtime_on_proba", 0.0), 0.0),
+                _safe_int(scored_row.get("cop_guardrail_adjusted", 0), 0),
+                input_json,
+                layer1_json,
+                layer2_json,
+                prediction_json,
+            ),
+        )
+
+
+def simulate_demo_snapshot(
+    capacity_kw: int,
+    outside_t_hint: float | None = None,
+    room_t_hint: float | None = None,
+) -> dict[str, Any]:
+    profile_capacity = normalize_capacity_profile(capacity_kw)
+    rng = random.Random()
+
+    if outside_t_hint is None:
+        outside_t = rng.uniform(-4.0, 15.0)
+    else:
+        outside_t = outside_t_hint + rng.uniform(-1.1, 1.1)
+
+    if room_t_hint is None:
+        room_t = rng.uniform(19.0, 22.0)
+    else:
+        room_t = room_t_hint + rng.uniform(-0.4, 0.4)
+
+    outside_t = round(max(-20.0, min(25.0, outside_t)), 1)
+    room_t = round(max(12.0, min(28.0, room_t)), 1)
+    outside_t_3h = round(max(-25.0, min(30.0, outside_t + rng.uniform(-1.4, 1.4))), 1)
+
+    temp_deficit = max(0.0, room_t - outside_t)
+    heating_on = 1 if (outside_t < 15.0 or temp_deficit > 4.0) else 0
+
+    base_elec = 60.0 if heating_on == 0 else (190.0 + temp_deficit * 52.0 * (profile_capacity / 6.0))
+    elec_lag1 = max(50.0, base_elec + rng.uniform(-65.0, 65.0))
+    elec_lag24 = max(50.0, elec_lag1 * rng.uniform(0.84, 1.07))
+    elec_lag168 = max(50.0, elec_lag1 * rng.uniform(0.78, 1.03))
+
+    cop_lag1 = 3.7 - max(0.0, 11.0 - outside_t) * 0.07 + rng.uniform(-0.18, 0.18)
+    cop_lag1 = max(1.2, min(4.8, cop_lag1))
+
+    heat_lag1 = 0.0 if heating_on == 0 else elec_lag1 * cop_lag1
+    heat_lag24 = 0.0 if heating_on == 0 else heat_lag1 * rng.uniform(0.84, 1.02)
+    heat_lag168 = 0.0 if heating_on == 0 else heat_lag1 * rng.uniform(0.75, 0.98)
+
+    run_hours = 0
+    if heating_on == 1:
+        run_hours = int(max(1, min(72, round(2 + temp_deficit * 0.6 + rng.uniform(-1.0, 2.2)))))
+
+    heating_on_lag24 = heating_on
+    if heating_on == 1 and rng.random() < 0.12:
+        heating_on_lag24 = 0
+
+    system_id = rng.choice(DEMO_SYSTEMS_BY_CAPACITY[profile_capacity])
+
+    return {
+        "captured_at": datetime.now(timezone.utc).isoformat(),
+        "system_id": int(system_id),
+        "capacity_kw": int(profile_capacity),
+        "outside_t": float(round(outside_t, 2)),
+        "outside_t_3h": float(round(outside_t_3h, 2)),
+        "room_t": float(round(room_t, 2)),
+        "elec_lag1": float(round(elec_lag1, 2)),
+        "elec_lag24": float(round(elec_lag24, 2)),
+        "elec_lag168": float(round(elec_lag168, 2)),
+        "heat_lag1": float(round(heat_lag1, 2)),
+        "heat_lag24": float(round(heat_lag24, 2)),
+        "heat_lag168": float(round(heat_lag168, 2)),
+        "cop_lag1": float(round(cop_lag1, 3)),
+        "heating_on_lag1": int(heating_on),
+        "heating_on_lag24": int(heating_on_lag24),
+        "run_hours": int(run_hours),
+    }
+
+
+def save_demo_snapshot(snapshot: dict[str, Any]) -> None:
+    ensure_demo_telemetry_store()
+    with sqlite3.connect(DEMO_DB_PATH) as conn:
+        conn.execute(
+            """
+            INSERT INTO demo_telemetry_snapshots (
+                captured_at,
+                system_id,
+                capacity_kw,
+                outside_t,
+                outside_t_3h,
+                room_t,
+                elec_lag1,
+                elec_lag24,
+                elec_lag168,
+                heat_lag1,
+                heat_lag24,
+                heat_lag168,
+                cop_lag1,
+                heating_on_lag1,
+                heating_on_lag24,
+                run_hours
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(snapshot["captured_at"]),
+                int(snapshot["system_id"]),
+                int(snapshot["capacity_kw"]),
+                float(snapshot["outside_t"]),
+                float(snapshot["outside_t_3h"]),
+                float(snapshot["room_t"]),
+                float(snapshot["elec_lag1"]),
+                float(snapshot["elec_lag24"]),
+                float(snapshot["elec_lag168"]),
+                float(snapshot["heat_lag1"]),
+                float(snapshot["heat_lag24"]),
+                float(snapshot["heat_lag168"]),
+                float(snapshot["cop_lag1"]),
+                int(snapshot["heating_on_lag1"]),
+                int(snapshot["heating_on_lag24"]),
+                int(snapshot["run_hours"]),
+            ),
+        )
+
+
+def _row_to_snapshot(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "captured_at": row["captured_at"],
+        "system_id": int(row["system_id"]),
+        "capacity_kw": int(row["capacity_kw"]),
+        "outside_t": float(row["outside_t"]),
+        "outside_t_3h": float(row["outside_t_3h"]),
+        "room_t": float(row["room_t"]),
+        "elec_lag1": float(row["elec_lag1"]),
+        "elec_lag24": float(row["elec_lag24"]),
+        "elec_lag168": float(row["elec_lag168"]),
+        "heat_lag1": float(row["heat_lag1"]),
+        "heat_lag24": float(row["heat_lag24"]),
+        "heat_lag168": float(row["heat_lag168"]),
+        "cop_lag1": float(row["cop_lag1"]),
+        "heating_on_lag1": int(row["heating_on_lag1"]),
+        "heating_on_lag24": int(row["heating_on_lag24"]),
+        "run_hours": int(row["run_hours"]),
+    }
+
+
+def get_demo_snapshot(
+    capacity_kw: float,
+    force_refresh: bool = False,
+    freshness_minutes: int = 30,
+) -> dict[str, Any]:
+    ensure_demo_telemetry_store()
+    profile_capacity = normalize_capacity_profile(capacity_kw)
+
+    row: sqlite3.Row | None
+    with sqlite3.connect(DEMO_DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            """
+            SELECT *
+            FROM demo_telemetry_snapshots
+            WHERE capacity_kw = ?
+            ORDER BY captured_at DESC
+            LIMIT 1
+            """,
+            (profile_capacity,),
+        ).fetchone()
+
+    if row is not None and not force_refresh:
+        snapshot = _row_to_snapshot(row)
+        captured_at = datetime.fromisoformat(str(snapshot["captured_at"]))
+        if captured_at.tzinfo is None:
+            captured_at = captured_at.replace(tzinfo=timezone.utc)
+        age_seconds = (datetime.now(timezone.utc) - captured_at).total_seconds()
+        if age_seconds <= float(freshness_minutes * 60):
+            return snapshot
+
+    outside_t_hint = float(row["outside_t"]) if row is not None else None
+    room_t_hint = float(row["room_t"]) if row is not None else None
+    snapshot = simulate_demo_snapshot(
+        capacity_kw=profile_capacity,
+        outside_t_hint=outside_t_hint,
+        room_t_hint=room_t_hint,
+    )
+    save_demo_snapshot(snapshot)
+    return snapshot
+
+
+def build_layer1_inputs_from_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "outside_t_3h": float(snapshot["outside_t_3h"]),
+        "elec_lag1": float(snapshot["elec_lag1"]),
+        "elec_lag24": float(snapshot["elec_lag24"]),
+        "elec_lag168": float(snapshot["elec_lag168"]),
+        "heat_lag1": float(snapshot["heat_lag1"]),
+        "heat_lag24": float(snapshot["heat_lag24"]),
+        "heat_lag168": float(snapshot["heat_lag168"]),
+        "cop_lag1": float(snapshot["cop_lag1"]),
+        "heating_on_lag1": bool(int(snapshot["heating_on_lag1"])),
+        "heating_on_lag24": bool(int(snapshot["heating_on_lag24"])),
+        "run_hours": int(snapshot["run_hours"]),
+        "system_id": int(snapshot["system_id"]),
+    }
+
+
+def _extract_gemini_text(data: dict[str, Any]) -> str:
+    candidates = data.get("candidates", [])
+    if not candidates:
+        return ""
+
+    first = candidates[0] if isinstance(candidates[0], dict) else {}
+    parts = first.get("content", {}).get("parts", [])
+    text = "\n".join(p.get("text", "") for p in parts if isinstance(p, dict)).strip()
+    return text
+
+
+def _extract_json_object(text: str) -> dict[str, Any]:
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = "\n".join(line for line in cleaned.splitlines() if not line.strip().startswith("```"))
+        cleaned = cleaned.strip()
+
+    try:
+        obj = json.loads(cleaned)
+        if isinstance(obj, dict):
+            return obj
+    except json.JSONDecodeError:
+        pass
+
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start >= 0 and end > start:
+        candidate = cleaned[start : end + 1]
+        obj = json.loads(candidate)
+        if isinstance(obj, dict):
+            return obj
+
+    raise ValueError("Gemini did not return a valid JSON object.")
+
+
+def call_gemini_structured(
+    api_key: str,
+    model_name: str,
+    prompt: str,
+    response_schema: dict[str, Any],
+) -> dict[str, Any]:
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+
+    def _extract_error(resp: requests.Response) -> str:
+        try:
+            payload = resp.json()
+            err = payload.get("error", {}) if isinstance(payload, dict) else {}
+            msg = err.get("message")
+            if msg:
+                return str(msg)
+        except Exception:
+            pass
+        return (resp.text or "Unknown Gemini API error")[:500]
+
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "temperature": 0.1,
+            "topP": 0.9,
+            "responseMimeType": "application/json",
+            "responseSchema": response_schema,
+        },
+    }
+
+    response = requests.post(url, json=payload, timeout=80)
+    if response.status_code == 400:
+        fallback_payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "temperature": 0.1,
+                "topP": 0.9,
+                "responseMimeType": "application/json",
+            },
+        }
+        response = requests.post(url, json=fallback_payload, timeout=80)
+
+    if not response.ok:
+        details = _extract_error(response)
+        raise RuntimeError(f"Gemini request failed ({response.status_code}) for model '{model_name}': {details}")
+
+    data = response.json()
+    text = _extract_gemini_text(data)
+    if not text:
+        raise RuntimeError("Gemini returned an empty structured response.")
+
+    return _extract_json_object(text)
+
+
+def _coerce_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return float(value) != 0.0
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return False
+
+
+def sanitize_layer2_overrides(raw: dict[str, Any], fallback: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    merged = dict(fallback)
+
+    numeric_bounds: dict[str, tuple[float, float]] = {
+        "outside_t_3h": (-25.0, 30.0),
+        "elec_lag1": (0.0, 5000.0),
+        "elec_lag24": (0.0, 5000.0),
+        "elec_lag168": (0.0, 5000.0),
+        "heat_lag1": (0.0, 9000.0),
+        "heat_lag24": (0.0, 9000.0),
+        "heat_lag168": (0.0, 9000.0),
+        "cop_lag1": (0.0, 8.0),
+    }
+
+    for key, (lower, upper) in numeric_bounds.items():
+        if key not in raw:
+            continue
+        try:
+            value = float(raw[key])
+        except Exception:
+            continue
+        if math.isnan(value):
+            continue
+        merged[key] = max(lower, min(upper, value))
+
+    if "heating_on_lag1" in raw:
+        merged["heating_on_lag1"] = _coerce_bool(raw["heating_on_lag1"])
+    if "heating_on_lag24" in raw:
+        merged["heating_on_lag24"] = _coerce_bool(raw["heating_on_lag24"])
+
+    if "run_hours" in raw:
+        try:
+            merged["run_hours"] = int(max(0, min(72, round(float(raw["run_hours"])))) )
+        except Exception:
+            pass
+
+    if not bool(merged.get("heating_on_lag1", False)):
+        merged["run_hours"] = 0
+        merged["heat_lag1"] = 0.0
+        merged["heat_lag24"] = 0.0
+        merged["heat_lag168"] = 0.0
+
+    elec_lag1 = float(merged.get("elec_lag1", 0.0))
+    cop_lag1 = float(merged.get("cop_lag1", 0.0))
+    if elec_lag1 > 0.0 and cop_lag1 > 0.0 and bool(merged.get("heating_on_lag1", True)):
+        expected_heat = elec_lag1 * cop_lag1
+        heat_lag1 = float(merged.get("heat_lag1", expected_heat))
+        if expected_heat > 0.0 and abs(heat_lag1 - expected_heat) > (0.35 * expected_heat):
+            merged["heat_lag1"] = expected_heat
+
+    rationale = str(raw.get("rationale", "")).strip()
+    return merged, rationale[:180]
+
+
+def apply_layer2_gemini_autofill(
+    base_inputs: dict[str, Any],
+    layer1_inputs: dict[str, Any],
+    layer1_source: str = "simulator_db",
+    layer1_note: str = "Using simulator telemetry from the demo database.",
+) -> tuple[dict[str, Any], dict[str, str]]:
+    merged_inputs = dict(layer1_inputs)
+    status = {
+        "layer1": layer1_source,
+        "layer2": "simulator_only",
+        "note": layer1_note,
+        "error": "",
+    }
+
+    api_key = os.getenv("GEMINI_API_KEY", "").strip()
+    model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    if not api_key:
+        return merged_inputs, status
+
+    prompt_context = {
+        "home_inputs": {
+            "outside_t": float(base_inputs["outside_t"]),
+            "room_t": float(base_inputs["room_t"]),
+            "capacity_kw": float(base_inputs["capacity_kw"]),
+            "hour": int(base_inputs.get("hour", datetime.now().hour)),
+            "month": int(base_inputs.get("month", datetime.now().month)),
+            "usage_goal": str(base_inputs.get("usage_goal", "Balanced comfort")),
+            "home_type": str(base_inputs.get("home_type", "Semi-detached")),
+        },
+        "layer1_simulated_values": layer1_inputs,
+        "constraints": {
+            "cop_min": 0.0,
+            "cop_max": 8.0,
+            "max_electricity_w": 5000,
+            "max_heat_w": 9000,
+        },
+    }
+
+    prompt = (
+        "You are assisting a heat-pump forecasting pipeline. "
+        "Return only JSON that conforms to the provided schema. "
+        "Task: refine lag features for inference while keeping values physically plausible. "
+        "Prefer small adjustments from layer1_simulated_values and avoid large jumps.\n\n"
+        f"Context:\n{json.dumps(prompt_context, indent=2)}"
+    )
+
+    try:
+        raw = call_gemini_structured(
+            api_key=api_key,
+            model_name=model_name,
+            prompt=prompt,
+            response_schema=GEMINI_LAYER2_SCHEMA,
+        )
+        merged_inputs, rationale = sanitize_layer2_overrides(raw, layer1_inputs)
+        status["layer2"] = "simulator_plus_gemini_structured"
+        status["note"] = rationale or "Structured Gemini autofill applied on top of simulator telemetry."
+    except Exception as exc:
+        status["error"] = str(exc)
+
+    return merged_inputs, status
 
 
 def inject_ui(appearance_mode: str = "Auto") -> None:
@@ -786,13 +1525,9 @@ def call_gemini(api_key: str, model_name: str, prompt: str) -> str:
         raise RuntimeError(f"Gemini request failed ({response.status_code}) for model '{model_name}': {details}")
 
     data = response.json()
-    candidates = data.get("candidates", [])
-    if not candidates:
+    text = _extract_gemini_text(data)
+    if not text:
         return "Gemini returned no candidates."
-
-    first = candidates[0] if isinstance(candidates[0], dict) else {}
-    parts = first.get("content", {}).get("parts", [])
-    text = "\n".join(p.get("text", "") for p in parts).strip()
     return text or "Gemini returned an empty response."
 
 
@@ -883,7 +1618,7 @@ def render_single_prediction_result(scored: pd.DataFrame, unit_rate: float, curr
 
 def render_instant_estimate_tab(run_tag: str, selected_manifest: dict[str, Any], unit_rate_default: float, currency_symbol: str) -> None:
     st.subheader("Instant Estimate")
-    st.caption("Tell us a few simple home details to estimate running cost, electricity use, and COP.")
+    st.caption("Provide the 8 core inputs below.")
 
     schema = resolve_feature_schema(selected_manifest)
     required_cols = schema.get("required_serving_columns", [])
@@ -896,10 +1631,10 @@ def render_instant_estimate_tab(run_tag: str, selected_manifest: dict[str, Any],
     now = datetime.now()
 
     with st.form("customer_single_prediction_form"):
-        st.markdown("#### 1) Home and comfort details")
+        st.markdown("#### 1) Home and comfort")
         c1, c2, c3 = st.columns(3)
-        outside_t = c1.slider("Current outside temperature (°C)", min_value=-20.0, max_value=25.0, value=6.0, step=0.5)
-        room_t = c2.slider("Current room temperature (°C)", min_value=12.0, max_value=28.0, value=20.0, step=0.5)
+        outside_t = c1.slider("Current outside temperature (C)", min_value=-20.0, max_value=25.0, value=6.0, step=0.5)
+        room_t = c2.slider("Current room temperature (C)", min_value=12.0, max_value=28.0, value=20.0, step=0.5)
         capacity_kw = c3.number_input(
             "Heat pump size (kW)",
             min_value=2.0,
@@ -909,6 +1644,7 @@ def render_instant_estimate_tab(run_tag: str, selected_manifest: dict[str, Any],
             format="%.1f",
         )
 
+        st.markdown("#### 2) Household preferences")
         c4, c5, c6 = st.columns(3)
         unit_rate = c4.number_input(
             f"Electricity price ({currency_symbol.strip() or '$'} per kWh)",
@@ -928,7 +1664,7 @@ def render_instant_estimate_tab(run_tag: str, selected_manifest: dict[str, Any],
             index=1,
         )
 
-        st.markdown("#### 2) Optional timing")
+        st.markdown("#### 3) Timing")
         t1, t2 = st.columns(2)
         hour = t1.slider("Time of day", min_value=0, max_value=23, value=now.hour, step=1)
         month = t2.selectbox(
@@ -938,52 +1674,7 @@ def render_instant_estimate_tab(run_tag: str, selected_manifest: dict[str, Any],
             format_func=lambda m: datetime(2025, m, 1).strftime("%B"),
         )
 
-        advanced_inputs: dict[str, Any] = {}
-        with st.expander("More options", expanded=False):
-            st.caption("Optional: provide recent history manually. Leave blank for automatic defaults.")
-            outside_t_3h = st.number_input(
-                "Average outside temperature over last 3 hours (°C)",
-                min_value=-25.0,
-                max_value=30.0,
-                value=outside_t,
-                step=0.5,
-            )
-
-            use_custom_history = st.toggle("I want to enter past usage values manually", value=False)
-            if use_custom_history:
-                h1, h2, h3 = st.columns(3)
-                elec_lag1 = h1.number_input("Electricity one hour ago (W)", min_value=0.0, max_value=5000.0, value=900.0, step=10.0)
-                heat_lag1 = h2.number_input("Heat output one hour ago (W)", min_value=0.0, max_value=8000.0, value=2600.0, step=10.0)
-                cop_lag1 = h3.number_input("COP one hour ago", min_value=0.0, max_value=8.0, value=3.0, step=0.1)
-
-                h4, h5, h6 = st.columns(3)
-                heating_on_lag1 = h4.toggle("Heating was running one hour ago", value=True)
-                heating_on_lag24 = h5.toggle("Heating was running yesterday at this time", value=True)
-                run_hours = h6.number_input("Current continuous runtime (hours)", min_value=0, max_value=72, value=3, step=1)
-
-                h7, h8, h9 = st.columns(3)
-                elec_lag24 = h7.number_input("Electricity 24 hours ago (W)", min_value=0.0, max_value=5000.0, value=800.0, step=10.0)
-                elec_lag168 = h8.number_input("Electricity 7 days ago (W)", min_value=0.0, max_value=5000.0, value=700.0, step=10.0)
-                heat_lag24 = h9.number_input("Heat output 24 hours ago (W)", min_value=0.0, max_value=8000.0, value=2200.0, step=10.0)
-                heat_lag168 = st.number_input("Heat output 7 days ago (W)", min_value=0.0, max_value=8000.0, value=1800.0, step=10.0)
-
-                system_id = st.number_input("System reference (optional)", min_value=0, value=0, step=1)
-
-                advanced_inputs = {
-                    "elec_lag1": elec_lag1,
-                    "elec_lag24": elec_lag24,
-                    "elec_lag168": elec_lag168,
-                    "heat_lag1": heat_lag1,
-                    "heat_lag24": heat_lag24,
-                    "heat_lag168": heat_lag168,
-                    "cop_lag1": cop_lag1,
-                    "heating_on_lag1": heating_on_lag1,
-                    "heating_on_lag24": heating_on_lag24,
-                    "run_hours": run_hours,
-                    "system_id": system_id,
-                }
-
-            advanced_inputs["outside_t_3h"] = outside_t_3h
+        st.caption("Additional model context is prepared automatically in the background.")
 
         submitted = st.form_submit_button("Predict Now", type="primary", use_container_width=True)
 
@@ -1000,8 +1691,36 @@ def render_instant_estimate_tab(run_tag: str, selected_manifest: dict[str, Any],
         "hour": hour,
         "month": month,
         "day_of_week": now.weekday(),
-        **advanced_inputs,
     }
+
+    now_utc = datetime.now(timezone.utc)
+    demo_snapshot: dict[str, Any] | None = None
+    layer1_inputs: dict[str, Any] | None
+    layer1_source = "prediction_history"
+    layer1_note = "Using persisted prediction history for lag simulation."
+
+    layer1_inputs, history_note = get_layer1_inputs_from_prediction_history(
+        capacity_kw=float(capacity_kw),
+        now_utc=now_utc,
+    )
+    if layer1_inputs is None:
+        try:
+            demo_snapshot = get_demo_snapshot(capacity_kw=float(capacity_kw), force_refresh=False)
+            layer1_inputs = build_layer1_inputs_from_snapshot(demo_snapshot)
+            layer1_source = "simulator_db"
+            layer1_note = history_note + " Falling back to simulator telemetry from the demo database."
+        except Exception as exc:
+            st.error(f"Could not prepare model context from available history: {exc}")
+            return
+
+    layer2_inputs, layer_status = apply_layer2_gemini_autofill(
+        user_inputs,
+        layer1_inputs,
+        layer1_source=layer1_source,
+        layer1_note=layer1_note,
+    )
+    user_inputs.update(layer2_inputs)
+    user_inputs["system_id"] = int(layer2_inputs.get("system_id", layer1_inputs.get("system_id", 0)))
 
     try:
         features_df = build_single_row(required_cols, dtype_map, user_inputs)
@@ -1009,15 +1728,48 @@ def render_instant_estimate_tab(run_tag: str, selected_manifest: dict[str, Any],
         with st.spinner("Calculating your estimate..."):
             scored = predict_module.predict_bundle(features_df, run_tag=run_tag)
         st.session_state["customer_latest_scored"] = scored
+        st.session_state["customer_layer_status"] = layer_status
+
+        if not scored.empty:
+            try:
+                save_prediction_history_entry(
+                    run_tag=run_tag,
+                    user_inputs=user_inputs,
+                    layer1_inputs=layer1_inputs,
+                    layer2_inputs=layer2_inputs,
+                    layer_status=layer_status,
+                    scored_row=scored.iloc[0].to_dict(),
+                )
+            except Exception as save_exc:
+                st.caption("Prediction completed, but history persistence failed: " + str(save_exc)[:220])
     except Exception as exc:
         st.error(f"Prediction failed: {exc}")
         return
 
     render_single_prediction_result(scored, unit_rate=unit_rate, currency_symbol=currency_symbol)
 
+    if layer_status.get("layer2") == "simulator_plus_gemini_structured":
+        st.success("Prediction context enhancement is active.")
+    else:
+        st.info("Prediction context prepared using available baseline data.")
+
+    note = layer_status.get("note", "").strip()
+    if note:
+        st.caption("Context note: automatic preprocessing applied.")
+    if layer_status.get("error"):
+        st.caption("An advanced context enhancement step was unavailable, so baseline context was used.")
+
     with st.expander("View technical details", expanded=False):
+        if demo_snapshot is not None:
+            st.markdown("Reference context snapshot (read-only)")
+            st.json(demo_snapshot)
+        else:
+            st.markdown("Reference context from recent historical records")
+            st.json(layer1_inputs)
+
         st.markdown("Prepared model input")
         st.dataframe(features_df, use_container_width=True)
+
         st.markdown("Raw prediction output")
         st.dataframe(scored, use_container_width=True)
 
@@ -1181,36 +1933,21 @@ def render_settings_bar(manifests: list[dict[str, Any]]) -> tuple[str, dict[str,
         """
         <section class="settings-shell">
             <div class="settings-title">Quick Start</div>
-            <div class="settings-sub">Set appearance and electricity price, then answer a few home questions below.</div>
+            <div class="settings-sub">Provide 8 core home inputs below for a fast estimate.</div>
         </section>
         """,
         unsafe_allow_html=True,
     )
 
-    c1, c2, c3 = st.columns([0.95, 1.0, 1.15])
-
-    c1.selectbox(
+    st.selectbox(
         "Appearance",
         ["Auto", "Light", "Dark"],
         key="customer_appearance_mode",
     )
 
-    currency_choice = c2.selectbox("Currency", options=["£", "€", "$"], index=0, key="customer_currency")
-    unit_rate = c3.number_input(
-        "Default price per kWh",
-        min_value=0.01,
-        max_value=2.0,
-        value=0.28,
-        step=0.01,
-        key="customer_unit_rate",
-    )
-
     selected_run = select_customer_run(manifests)
     run_tag = str(selected_run.get("run_tag", ""))
-
-    currency_symbol = currency_choice
-
-    return run_tag, selected_run, float(unit_rate), currency_symbol
+    return run_tag, selected_run, 0.28, "£"
 
 
 def render_gemini_tab(selected_run: dict[str, Any]) -> None:
@@ -1312,6 +2049,12 @@ def render_gemini_tab(selected_run: dict[str, Any]) -> None:
 def main() -> None:
     load_env_file(ROOT / ".env")
     st.set_page_config(page_title="Heat Pump Energy Planner", layout="wide")
+    try:
+        ensure_demo_telemetry_store()
+        ensure_prediction_history_store()
+    except Exception as exc:
+        st.warning(f"Demo telemetry store is unavailable right now: {exc}")
+
     if "customer_appearance_mode" not in st.session_state:
         st.session_state["customer_appearance_mode"] = "Auto"
     inject_ui(appearance_mode=st.session_state.get("customer_appearance_mode", "Auto"))

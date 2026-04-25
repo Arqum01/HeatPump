@@ -37,8 +37,8 @@ def parse_system_id_filter_from_env() -> list[int] | None:
 
     ids = []
     seen = set()
-    for token in raw.split(","):
-        token = token.strip()
+    for raw_token in raw.split(","):
+        token = raw_token.strip()
         if not token:
             continue
         try:

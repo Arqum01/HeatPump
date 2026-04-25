@@ -53,8 +53,8 @@ def parse_system_id_filter_from_env() -> list[int] | None:
 
     ids = []
     seen = set()
-    for token in raw.split(","):
-        token = token.strip()
+    for raw_token in raw.split(","):
+        token = raw_token.strip()
         if not token:
             continue
         try:
@@ -98,21 +98,28 @@ def parse_systems_from_env() -> list[dict]:
             for item in parsed_json:
                 if not isinstance(item, dict):
                     continue
-                sid = int(item["series_id"])
-                cap = float(item["capacity_kw"])
+                try:
+                    sid = int(item["series_id"])
+                    cap = float(item["capacity_kw"])
+                except (KeyError, TypeError, ValueError):
+                    continue
                 systems.append({"series_id": sid, "capacity_kw": cap})
             if systems:
                 if not id_filter:
                     return systems
                 allowed = set(id_filter)
                 filtered = [s for s in systems if s["series_id"] in allowed]
-                return filtered if filtered else systems
-    except Exception:
+                if filtered:
+                    return filtered
+                raise ValueError(
+                    f"SYSTEM_IDS filter {sorted(allowed)} matched no entries in SYSTEMS_CONFIG."
+                )
+    except json.JSONDecodeError:
         pass
 
     systems = []
-    for token in raw.split(","):
-        token = token.strip()
+    for raw_token in raw.split(","):
+        token = raw_token.strip()
         if not token:
             continue
         if ":" not in token:
@@ -130,7 +137,11 @@ def parse_systems_from_env() -> list[dict]:
             return systems
         allowed = set(id_filter)
         filtered = [s for s in systems if s["series_id"] in allowed]
-        return filtered if filtered else systems
+        if filtered:
+            return filtered
+        raise ValueError(
+            f"SYSTEM_IDS filter {sorted(allowed)} matched no entries in SYSTEMS_CONFIG."
+        )
 
     default_capacity_kw = float(os.getenv("DEFAULT_CAPACITY_KW", "6"))
     if not id_filter:
@@ -162,7 +173,7 @@ FEEDS = [
 # - fixed_window: use START and END directly.
 # - max_available: attempt a broad historical pull and fallback if needed.
 FETCH_MODE = os.getenv("FETCH_MODE", "fixed_window").strip().lower()  # or "max_available"
-START = os.getenv("START_DATE", "01-01-2023").strip()
+START = os.getenv("START_DATE", "01-01-2024").strip()
 END = os.getenv("END_DATE", "01-02-2026").strip()
 VERY_EARLY_START = "01-01-2010"
 

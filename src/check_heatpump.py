@@ -124,7 +124,7 @@ def normalize_raw_payload(raw_json: Any) -> dict[str, list]:
         if len(raw_json) == len(FEEDS) and all(isinstance(v, (list, tuple)) for v in raw_json):
             return {
                 feed: coerce_feed_values(values)
-                for feed, values in zip(FEEDS, raw_json)
+                for feed, values in zip(FEEDS, raw_json, strict=True)
             }
 
         if all(isinstance(v, dict) for v in raw_json):

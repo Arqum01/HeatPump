@@ -1,6 +1,7 @@
-# Streamlit App Guide (streamlit_app.py)
+# Streamlit App Guide (app.py router)
 
-This guide is only for running and using the Streamlit application in `streamlit_app.py`.
+This guide is for running the Streamlit application through `app.py`, which routes to `customer_app.py` or `admin_app.py`.
+`streamlit_app.py` is kept only as a compatibility entrypoint.
 
 ## 1. What This App Does
 
@@ -43,10 +44,17 @@ Activate environment:
 .\.venv\Scripts\Activate.ps1
 ```
 
-Run Streamlit:
+Run Streamlit (customer mode, default):
 
 ```powershell
-.venv\Scripts\python.exe -m streamlit run streamlit_app.py
+.venv\Scripts\python.exe -m streamlit run app.py
+```
+
+Run Streamlit (admin mode):
+
+```powershell
+$env:SPACE_APP_MODE = "admin"
+.venv\Scripts\python.exe -m streamlit run app.py
 ```
 
 Streamlit will print a local URL (usually `http://localhost:8501`). Open it in your browser.
@@ -273,7 +281,7 @@ Or paste key in UI input.
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
-.venv\Scripts\python.exe -m streamlit run streamlit_app.py
+.venv\Scripts\python.exe -m streamlit run app.py
 ```
 
 Then in app: Pipeline -> set system filters -> Run Full Pipeline.

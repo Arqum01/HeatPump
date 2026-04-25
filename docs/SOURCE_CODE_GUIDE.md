@@ -12,8 +12,10 @@ It is designed for fast onboarding, safe edits, and easier debugging.
 5. `05_predict_model.py`: Load artifacts and run batch inference.
 6. `monitoring_model_06.py`: Build monitoring summaries from prediction runs.
 7. `backtest_model_07.py`: Run walk-forward backtesting and slice diagnostics.
-8. `streamlit_app.py`: Admin/ops console for running the pipeline and analyzing outputs.
-9. `customer_app.py`: Customer-facing estimator with guided inputs and AI briefing.
+8. `app.py`: Streamlit router entrypoint that selects customer or admin mode.
+9. `admin_app.py`: Admin/ops console for running the pipeline and analyzing outputs.
+10. `customer_app.py`: Customer-facing estimator with guided inputs and AI briefing.
+11. `streamlit_app.py`: Legacy compatibility entrypoint (forwards to `app.py`).
 
 ---
 
@@ -337,9 +339,9 @@ Runs walk-forward backtesting and slice diagnostics to estimate temporal general
 
 ---
 
-## `streamlit_app.py`
+## `app.py` and `admin_app.py`
 ### Module Role
-Admin and operations console for end-to-end model lifecycle activities.
+Mode-based Streamlit entrypoint (`app.py`) and admin operations console (`admin_app.py`) for end-to-end model lifecycle activities.
 
 ### Key Responsibilities
 - Discover and execute numbered pipeline stages.
@@ -349,6 +351,7 @@ Admin and operations console for end-to-end model lifecycle activities.
 - Allow run-tag selection by feature policy in scoring and diagnostics areas.
 
 ### High-Impact Functions
+- `resolve_main()` in `app.py`: Chooses `customer_app` or `admin_app` from `SPACE_APP_MODE`.
 - `discover_pipeline_stages()`: Finds runnable stages dynamically from src.
 - `execute_stage(...)`: Applies per-stage env overrides and executes scripts.
 - `render_pipeline_tab()`: Main automation workflow and log viewer.
@@ -386,5 +389,5 @@ Customer-facing interface for quick home-level estimates and plain-language AI g
 3. Read `04_train_model.py` for core modeling logic.
 4. Read `05_predict_model.py` for serving parity.
 5. Use `monitoring_model_06.py` and `backtest_model_07.py` for operational and validation context.
-6. Read `streamlit_app.py` for admin/ops execution workflow.
+6. Read `app.py` first, then `admin_app.py` for admin/ops execution workflow.
 7. Read `customer_app.py` with docs/CUSTOMER_APP_DETAILED_DOCUMENTATION.md for customer journey details.

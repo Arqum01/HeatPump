@@ -793,14 +793,36 @@ def execute_stage(
     custom_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     stage_name_for_label = Path(stage.get("path", "")).name.lower()
+    custom_options = custom_options or {}
+    effective_timeout_seconds = int(timeout_seconds)
 
     if stage["kind"] == "script":
         extra_env: dict[str, str] = {}
         stage_name = stage_name_for_label
         if stage_name == "04_train_model.py":
             extra_env["FEATURE_POLICY_MODE"] = train_policy_mode
+            train_stage_timeout = custom_options.get("train_stage_timeout_seconds")
+            if train_stage_timeout is not None:
+                try:
+                    effective_timeout_seconds = int(train_stage_timeout)
+                except Exception:
+                    effective_timeout_seconds = int(timeout_seconds)
 
-        custom_options = custom_options or {}
+            if bool(custom_options.get("train_fast_mode", True)):
+                extra_env.update(
+                    {
+                        "TRAIN_FAST_MODE": "1",
+                        "TRAIN_ENABLE_WALK_FORWARD_TUNING": "0",
+                        "TRAIN_TARGET_STRATEGIES": "none,log1p_both",
+                        "TRAIN_N_ESTIMATOR_SCALE": "0.35",
+                        "TRAIN_EARLY_STOP_SCALE": "0.5",
+                        "TRAIN_WALK_FORWARD_SPLITS": "2",
+                        "TRAIN_N_JOBS": "4",
+                    }
+                )
+            else:
+                extra_env["TRAIN_FAST_MODE"] = "0"
+
         system_ids_csv = str(custom_options.get("system_ids", "")).strip()
         train_system_ids_csv = str(custom_options.get("train_system_ids", "")).strip()
 
@@ -839,15 +861,15 @@ def execute_stage(
         elif stage_name == "backtest_model_07.py":
             extra_env["FEATURE_POLICY_MODE"] = str(custom_options.get("backtest_policy_mode", train_policy_mode))
 
-        result = run_python_script(ROOT / stage["path"], timeout_seconds, extra_env=extra_env)
+        result = run_python_script(ROOT / stage["path"], effective_timeout_seconds, extra_env=extra_env)
     else:
         result = run_monitoring_stage()
     result["stage_id"] = stage["id"]
-    result["stage_label"] = (
-        f"{stage['label']} [{train_policy_mode}]"
-        if stage_name_for_label == "04_train_model.py"
-        else stage["label"]
-    )
+    if stage_name_for_label == "04_train_model.py":
+        profile_tag = "quick" if bool(custom_options.get("train_fast_mode", True)) else "full"
+        result["stage_label"] = f"{stage['label']} [{train_policy_mode}, {profile_tag}]"
+    else:
+        result["stage_label"] = stage["label"]
     return result
 
 
@@ -1039,6 +1061,23 @@ def render_pipeline_tab() -> None:
         clean_outside_t_min = cl3.number_input("OutsideT min", min_value=-60.0, max_value=20.0, value=-20.0, step=1.0, key="cfg_clean_outside_t_min")
         clean_outside_t_max = cl4.number_input("OutsideT max", min_value=20.0, max_value=80.0, value=40.0, step=1.0, key="cfg_clean_outside_t_max")
 
+        st.markdown("#### 04 Train Model")
+        tr1, tr2 = st.columns(2)
+        train_fast_mode = tr1.checkbox(
+            "Quick training mode (recommended for UI)",
+            value=True,
+            key="cfg_train_fast_mode",
+            help="Runs a lighter training profile so stage 04 finishes faster in the admin UI.",
+        )
+        train_stage_timeout_seconds = tr2.number_input(
+            "Train stage timeout (seconds)",
+            min_value=120,
+            max_value=14400,
+            value=1200,
+            step=60,
+            key="cfg_train_stage_timeout_seconds",
+        )
+
         st.markdown("#### 07 Backtest")
         backtest_policy_mode = st.radio(
             "Backtest feature policy",
@@ -1062,6 +1101,8 @@ def render_pipeline_tab() -> None:
         "clean_cop_max": clean_cop_max,
         "clean_outside_t_min": clean_outside_t_min,
         "clean_outside_t_max": clean_outside_t_max,
+        "train_fast_mode": train_fast_mode,
+        "train_stage_timeout_seconds": train_stage_timeout_seconds,
         "backtest_policy_mode": backtest_policy_mode,
     }
 
@@ -1074,7 +1115,15 @@ def render_pipeline_tab() -> None:
                 train_modes = ["enhanced_onestep", "strict_production"]
 
             for mode in train_modes:
-                with st.spinner(f"Running {stage['label']} ({mode})..."):
+                stage_name = Path(stage.get("path", "")).name.lower()
+                if stage_name == "04_train_model.py":
+                    profile_text = "quick" if bool(custom_options.get("train_fast_mode", True)) else "full"
+                    timeout_text = int(custom_options.get("train_stage_timeout_seconds", timeout_seconds))
+                    spinner_label = f"Running {stage['label']} ({mode}, {profile_text}, timeout {timeout_text}s)..."
+                else:
+                    spinner_label = f"Running {stage['label']} ({mode})..."
+
+                with st.spinner(spinner_label):
                     run = execute_stage(
                         stage,
                         timeout_seconds,
@@ -1102,7 +1151,15 @@ def render_pipeline_tab() -> None:
                 train_modes = ["enhanced_onestep", "strict_production"]
 
             for mode in train_modes:
-                with st.spinner(f"Running {stage['label']} ({mode})..."):
+                stage_name = Path(stage.get("path", "")).name.lower()
+                if stage_name == "04_train_model.py":
+                    profile_text = "quick" if bool(custom_options.get("train_fast_mode", True)) else "full"
+                    timeout_text = int(custom_options.get("train_stage_timeout_seconds", timeout_seconds))
+                    spinner_label = f"Running {stage['label']} ({mode}, {profile_text}, timeout {timeout_text}s)..."
+                else:
+                    spinner_label = f"Running {stage['label']} ({mode})..."
+
+                with st.spinner(spinner_label):
                     run = execute_stage(
                         stage,
                         timeout_seconds,

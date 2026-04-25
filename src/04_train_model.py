@@ -36,10 +36,61 @@ TARGET_ELEC = "heatpump_elec"
 TARGET_HEAT = "heatpump_heat"
 
 FEATURE_POLICY_MODE = os.getenv("FEATURE_POLICY_MODE", "enhanced_onestep").strip().lower()
-TARGET_STRATEGY_CANDIDATES = ["none", "log1p_both", "cop_ratio_heat"]
-WALK_FORWARD_SPLITS = 3
-ENABLE_WALK_FORWARD_TUNING = True
+TRAIN_FAST_MODE = os.getenv("TRAIN_FAST_MODE", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def env_flag(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def env_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return float(default)
+    try:
+        return float(raw)
+    except ValueError:
+        return float(default)
+
+
+def env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return int(default)
+    try:
+        return int(raw)
+    except ValueError:
+        return int(default)
+
+
+def parse_target_strategies(default_values: list[str]) -> list[str]:
+    raw = os.getenv("TRAIN_TARGET_STRATEGIES", "").strip()
+    if not raw:
+        return default_values
+
+    allowed = {"none", "log1p_both", "cop_ratio_heat"}
+    values = []
+    seen = set()
+    for token in raw.split(","):
+        key = token.strip().lower()
+        if key not in allowed or key in seen:
+            continue
+        seen.add(key)
+        values.append(key)
+    return values if values else default_values
+
+
+DEFAULT_STRATEGIES = ["none", "log1p_both"] if TRAIN_FAST_MODE else ["none", "log1p_both", "cop_ratio_heat"]
+TARGET_STRATEGY_CANDIDATES = parse_target_strategies(DEFAULT_STRATEGIES)
+WALK_FORWARD_SPLITS = max(2, env_int("TRAIN_WALK_FORWARD_SPLITS", 2 if TRAIN_FAST_MODE else 3))
+ENABLE_WALK_FORWARD_TUNING = env_flag("TRAIN_ENABLE_WALK_FORWARD_TUNING", not TRAIN_FAST_MODE)
 ENABLE_SLICE_CALIBRATION = True
+TRAIN_N_ESTIMATOR_SCALE = max(0.1, min(1.0, env_float("TRAIN_N_ESTIMATOR_SCALE", 0.35 if TRAIN_FAST_MODE else 1.0)))
+TRAIN_EARLY_STOP_SCALE = max(0.2, min(1.0, env_float("TRAIN_EARLY_STOP_SCALE", 0.5 if TRAIN_FAST_MODE else 1.0)))
+TRAIN_N_JOBS = env_int("TRAIN_N_JOBS", -1)
 # allowed values:
 # "strict_production"  -> only features known safely at prediction time
 # "enhanced_onestep"   -> allows lagged observed telemetry from previous hours
@@ -117,8 +168,8 @@ def parse_train_system_ids() -> list[int] | None:
 
     ids = []
     seen = set()
-    for token in raw.split(","):
-        token = token.strip()
+    for raw_token in raw.split(","):
+        token = raw_token.strip()
         if not token:
             continue
         try:
@@ -142,7 +193,7 @@ def model_hyperparams(label: str) -> dict:
         dict: Parameter dictionary suitable for ``XGBRegressor``.
     """
     if label == "electricity":
-        return {
+        params = {
             "n_estimators": 2200,
             "learning_rate": 0.02,
             "max_depth": 7,
@@ -153,13 +204,16 @@ def model_hyperparams(label: str) -> dict:
             "reg_lambda": 2.0,
             "gamma": 0.1,
             "random_state": 42,
-            "n_jobs": -1,
+            "n_jobs": TRAIN_N_JOBS,
             "early_stopping_rounds": 120,
             "eval_metric": "mae",
         }
+        params["n_estimators"] = max(250, int(params["n_estimators"] * TRAIN_N_ESTIMATOR_SCALE))
+        params["early_stopping_rounds"] = max(30, int(params["early_stopping_rounds"] * TRAIN_EARLY_STOP_SCALE))
+        return params
 
     if label == "heat":
-        return {
+        params = {
             "n_estimators": 2600,
             "learning_rate": 0.015,
             "max_depth": 8,
@@ -170,10 +224,13 @@ def model_hyperparams(label: str) -> dict:
             "reg_lambda": 1.8,
             "gamma": 0.05,
             "random_state": 42,
-            "n_jobs": -1,
+            "n_jobs": TRAIN_N_JOBS,
             "early_stopping_rounds": 150,
             "eval_metric": "mae",
         }
+        params["n_estimators"] = max(300, int(params["n_estimators"] * TRAIN_N_ESTIMATOR_SCALE))
+        params["early_stopping_rounds"] = max(35, int(params["early_stopping_rounds"] * TRAIN_EARLY_STOP_SCALE))
+        return params
 
     raise ValueError("label must be 'electricity' or 'heat'")
 
@@ -1332,6 +1389,15 @@ def main():
     and report/manifest writing.
     """
     run_tag = f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{FEATURE_POLICY_MODE}"
+    print("Training runtime profile")
+    print(f"  TRAIN_FAST_MODE={TRAIN_FAST_MODE}")
+    print(f"  TARGET_STRATEGY_CANDIDATES={TARGET_STRATEGY_CANDIDATES}")
+    print(f"  ENABLE_WALK_FORWARD_TUNING={ENABLE_WALK_FORWARD_TUNING}")
+    print(f"  WALK_FORWARD_SPLITS={WALK_FORWARD_SPLITS}")
+    print(f"  TRAIN_N_ESTIMATOR_SCALE={TRAIN_N_ESTIMATOR_SCALE}")
+    print(f"  TRAIN_EARLY_STOP_SCALE={TRAIN_EARLY_STOP_SCALE}")
+    print(f"  TRAIN_N_JOBS={TRAIN_N_JOBS}")
+
     df, elec_features, heat_features = load_data()
     print(f"Electricity feature count: {len(elec_features)}")
     print(f"Heat feature count: {len(heat_features)}")

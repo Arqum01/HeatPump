@@ -30,7 +30,8 @@ This guide remains focused on pipeline teaching and stage-by-stage internals.
 
 Current workspace operation now also includes:
 
-- `streamlit_app.py` admin tabs with run-context selection in Model Health and Gemini, plus System Metadata lookup.
+- `app.py` route entrypoint with mode-based selection of UI implementation.
+- `admin_app.py` admin tabs with run-context selection in Model Health and Gemini, plus System Metadata lookup.
 - `customer_app.py` customer journey with simplified inputs, AI Briefing presets + custom request, and staff-gated advanced tools.
 
 For current implementation behavior and operations details, use:
@@ -102,7 +103,7 @@ After studying this pipeline, students should be able to:
 │  └─────────────┘   └─────────────┘   └─────────────┘                   │
 │                                                                         │
 │  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │                    streamlit_app.py (UI)                        │   │
+│  │   app.py router -> admin_app.py / customer_app.py (UI)         │   │
 │  └─────────────────────────────────────────────────────────────────┘   │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -1189,11 +1190,11 @@ models/
 
 ## 9. Stage 7: Streamlit Dashboard
 
-### 📁 File: `streamlit_app.py`
+### 📁 Files: `app.py`, `admin_app.py`, `customer_app.py`
 
 ### Concept: Interactive ML Operations Interface
 
-The Streamlit app provides a web-based UI for:
+The routed Streamlit apps provide a web-based UI for:
 1. Running pipeline stages
 2. Making predictions
 3. Viewing backtest results
