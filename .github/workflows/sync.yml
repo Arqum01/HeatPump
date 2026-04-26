@@ -19,16 +19,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y git-lfs
 
-      - name: Push clean snapshot to hub
+      - name: Push clean snapshot to both hubs
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          NETZERO: ${{ secrets.NETZERO }}
         run: |
           set -euo pipefail
           TARGET_DIR="/tmp/hf-space-sync"
           rm -rf "$TARGET_DIR"
           mkdir -p "$TARGET_DIR"
 
-          # Sync project files but exclude processed datasets and local git metadata.
+          # 1. Sync project files but exclude processed datasets and local git metadata.
           rsync -a --delete \
             --exclude '.git' \
             --exclude 'data/processed' \
@@ -41,7 +42,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # Track large model artifacts through LFS in the clean snapshot repo.
+          # 2. Track large model artifacts through LFS in the clean snapshot repo.
           git lfs install --local
           git lfs track "models/**/*.json"
           git lfs track "models/**/*.joblib"
@@ -49,5 +50,11 @@ jobs:
 
           git add -A
           git commit -m "Sync from GitHub ${GITHUB_SHA}"
-          git remote add origin "https://zeeshanabbas0556:${HF_TOKEN}@huggingface.co/spaces/zeeshanabbas0556/vector-thermal-ai-uk"
-          git push --force origin main
+
+          # 3. PUSH TO ORIGINAL ACCOUNT (zeeshanabbas0556)
+          echo "Pushing to zeeshanabbas0556/vector-thermal-ai-uk..."
+          git push --force "https://zeeshanabbas0556:${HF_TOKEN}@huggingface.co/spaces/zeeshanabbas0556/vector-thermal-ai-uk" main
+
+          # 4. PUSH TO NEW ACCOUNT (Arqum01)
+          echo "Pushing to Arqum01/NetZero..."
+          git push --force "https://Arqum01:${NETZERO}@huggingface.co/spaces/Arqum01/NetZero" main
