@@ -1277,7 +1277,7 @@ def render_artifacts_tab() -> None:
     if suffix == ".csv":
         df = pd.read_csv(selected)
         st.write(f"Rows: {len(df):,} | Columns: {len(df.columns)}")
-        st.dataframe(df.head(200), width="stretch")
+        st.dataframe(df.head(200), use_container_width=True)
 
         numeric_cols = df.select_dtypes(include="number").columns.tolist()
         if numeric_cols:
@@ -1330,7 +1330,7 @@ def render_model_tab() -> None:
 
     if "strategy_scores" in manifest:
         st.markdown("### Strategy Leaderboard")
-        st.dataframe(pd.DataFrame(manifest["strategy_scores"]), width="stretch")
+        st.dataframe(pd.DataFrame(manifest["strategy_scores"]), use_container_width=True)
 
     gates = manifest.get("gates")
     if gates:
@@ -1341,7 +1341,7 @@ def render_model_tab() -> None:
     if backtest_path.exists():
         st.markdown("### Walk-Forward Folds")
         backtest_df = pd.read_csv(backtest_path)
-        st.dataframe(backtest_df, width="stretch")
+        st.dataframe(backtest_df, use_container_width=True)
 
 
 def render_predict_tab() -> None:
@@ -1393,7 +1393,7 @@ def render_predict_tab() -> None:
 
     input_df = pd.read_csv(uploaded)
     st.write("Input preview")
-    st.dataframe(input_df.head(30), width="stretch")
+    st.dataframe(input_df.head(30), use_container_width=True)
 
     if st.button("Score Batch", type="primary"):
         with st.spinner("Scoring with bundled artifacts..."):
@@ -1408,7 +1408,7 @@ def render_predict_tab() -> None:
             scored.to_csv(output_path, index=False)
 
         st.success(f"Scoring complete. Saved {output_path.relative_to(ROOT)}")
-        st.dataframe(scored.head(60), width="stretch")
+        st.dataframe(scored.head(60), use_container_width=True)
 
         m1, m2, m3 = st.columns(3)
         m1.metric("Rows", f"{len(scored):,}")
@@ -1502,7 +1502,7 @@ def render_single_input_tab() -> None:
     edited_df = st.data_editor(
         editor_df,
         num_rows="fixed",
-        width="stretch",
+        use_container_width=True,
         hide_index=True,
         key=f"single_editor_{signature}",
     )
@@ -1521,7 +1521,7 @@ def render_single_input_tab() -> None:
             p3.metric("Pred COP", f"{float(pred_row.get('pred_cop', 0.0)):.3f}")
 
             st.markdown("### Predicted Row")
-            st.dataframe(scored, width="stretch")
+            st.dataframe(scored, use_container_width=True)
         except Exception as exc:
             st.error(f"Single row prediction failed: {exc}")
 
@@ -1678,7 +1678,7 @@ def render_system_metadata_tab() -> None:
         st.markdown(f"### {title}")
         # Streamlit Arrow serialization can fail on mixed object types; render values as text.
         rows = [{"Field": str(k), "Value": "" if data[k] is None else str(data[k])} for k in data]
-        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
     s1, s2 = st.columns(2)
     with s1:
