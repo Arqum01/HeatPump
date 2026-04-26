@@ -1107,7 +1107,7 @@ def render_pipeline_tab() -> None:
     }
 
     c1, c2 = st.columns([1, 1])
-    if c1.button("Run Full Pipeline", type="primary", width="stretch"):
+    if c1.button("Run Full Pipeline", type="primary", use_container_width=True):
         for stage in pipeline_stages:
             stage_name = Path(stage.get("path", "")).name.lower()
             train_modes = [train_policy_mode]
@@ -1135,7 +1135,7 @@ def render_pipeline_tab() -> None:
                     st.error(f"{run['stage_label']} failed. Full pipeline stopped.")
                     return
 
-    if c2.button("Clear Run History", width="stretch"):
+    if c2.button("Clear Run History", use_container_width=True):
         st.session_state["stage_runs"] = []
         st.rerun()
 
@@ -1144,7 +1144,7 @@ def render_pipeline_tab() -> None:
     stage_cols = st.columns(col_count)
     for idx, stage in enumerate(pipeline_stages):
         col = stage_cols[idx % col_count]
-        if col.button(stage["label"], key=f"run_{stage['id']}", width="stretch"):
+        if col.button(stage["label"], key=f"run_{stage['id']}", use_container_width=True):
             stage_name = Path(stage.get("path", "")).name.lower()
             train_modes = [train_policy_mode]
             if stage_name == "04_train_model.py" and train_policy_mode == "both":
@@ -1636,8 +1636,8 @@ def render_system_metadata_tab() -> None:
     default_system_id = get_default_system_context()["default_system_id"]
     c1, c2, c3 = st.columns([2, 1, 1])
     system_id = c1.number_input("System ID", min_value=1, value=default_system_id, step=1)
-    lookup_clicked = c2.button("Lookup", type="primary", width="stretch")
-    refresh_clicked = c3.button("Refresh API Cache", width="stretch")
+    lookup_clicked = c2.button("Lookup", type="primary", use_container_width=True)
+    refresh_clicked = c3.button("Refresh API Cache", use_container_width=True)
 
     if refresh_clicked:
         fetch_public_system_list.clear()

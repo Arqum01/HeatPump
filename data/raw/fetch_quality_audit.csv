@@ -1,8 +1,0 @@
-series_id,capacity_kw,rows,missing_heatpump_elec_pct,missing_heatpump_heat_pct,missing_heatpump_returnT_pct,missing_heatpump_flowT_pct,missing_heatpump_roomT_pct,missing_heatpump_outsideT_pct,missing_heatpump_flowrate_pct,status
-44,8.0,18288,0.6,0.1,0.1,0.1,4.59,0.02,0.1,SUCCESS
-72,8.0,18288,5.9,0.58,0.58,0.58,2.9,0.02,0.58,SUCCESS
-224,8.0,18288,18.64,18.66,18.66,18.66,18.66,18.57,18.66,SUCCESS
-162,6.0,18288,0.05,0.01,0.01,0.01,0.57,0.48,3.87,SUCCESS
-117,6.0,18288,5.48,5.5,5.5,5.5,5.5,6.34,5.48,SUCCESS
-810,6.0,18288,14.28,15.43,14.16,14.16,15.45,16.27,100.0,SUCCESS
-147,4.0,18288,10.78,10.78,10.78,10.78,10.78,10.78,10.78,SUCCESS

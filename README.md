@@ -14,6 +14,7 @@ This project contains a full heat pump forecasting pipeline, an admin AI Ops Str
 
 Use these guides for complete setup, operations, and code understanding:
 
+- [docs/COMPLETE_PROJECT_FLOW.md](docs/COMPLETE_PROJECT_FLOW.md)
 - [PIPELINE_GUIDE.md](PIPELINE_GUIDE.md)
 - [docs/CUSTOMER_APP_DETAILED_DOCUMENTATION.md](docs/CUSTOMER_APP_DETAILED_DOCUMENTATION.md)
 - [docs/SOURCE_CODE_GUIDE.md](docs/SOURCE_CODE_GUIDE.md)
@@ -28,6 +29,7 @@ Use these guides for complete setup, operations, and code understanding:
 .venv\Scripts\python.exe src/02_feature_engineering.py
 .venv\Scripts\python.exe src/03_clean_data.py
 .venv\Scripts\python.exe src/04_train_model.py
+.venv\Scripts\python.exe src/05_predict_model.py
 ```
 
 ## Custom System Selection
@@ -113,3 +115,19 @@ Admin app allows entering key/model in UI as well.
 The app sends requests to:
 
 `https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent`
+
+## Hugging Face Spaces Status
+
+This repository is now organized for Spaces deployment:
+
+- `README.md` contains Space metadata header
+- `app.py` is the Space entrypoint router
+- `requirements.txt` includes runtime dependencies
+- `.github/workflows/sync.yml` syncs a clean snapshot to Hugging Face
+- Large model artifacts are tracked via `.gitattributes`
+
+Recommended before every push:
+
+1. Run a fresh training cycle if model artifacts changed.
+2. Run `src/05_predict_model.py` to validate inference artifacts.
+3. Confirm app starts locally with Streamlit.
